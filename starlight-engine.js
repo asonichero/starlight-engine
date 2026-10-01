@@ -2872,6 +2872,16 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   s.group.updateMatrixWorld(true);
   }
   scn.anchors = sceneAnchors(s);
+  if (scn.atSpread) {
+    // The disciplinarian's left hand rests on the curve of their own left hip: a skinned point on the side of the pelvis
+    // just below the waist, taken once in rest space, with its outward normal.
+    const sp = g.spec, J = sp.J, H = sp.H, pt = [0, sp.Y.hip - 0.02 * H, 0];
+    for (let i = 0; i < 400 && field(sp, pt) < 0; i++) pt[0] += 0.001;
+    const n = norm(gradient(sp, pt, 0.0015, field(sp, pt))), pos = g.mesh.geometry.attributes.position, v = new THREE.Vector3(), q = new THREE.Vector3(...pt);
+    let index = 0, best = Infinity;
+    for (let i = 0; i < pos.count; i++) { const d = v.fromBufferAttribute(pos, i).distanceToSquared(q); if (d < best) { best = d; index = i; } }
+    scn.hipL = { index, n: new THREE.Vector3(...n), bone: 'pelvis' };
+  }
 
   // The disciplinarian's pose for a beat, with the implement's own layer if it has one.
   const giverQCache = {};
@@ -3045,10 +3055,16 @@ function updateScene(scn, dt) {
   const navW = scn.atHead || scn.atSpread ? easeInOut(clamp(swing / 0.7, 0, 1)) : 1;
   const giverRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(g.group.quaternion);
   let leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
+  let hipSelf = null;
   if (scn.atSpread) {
-    // Spread feet: the left hand hangs by the hip while relaxed (as set), reaching for the back as the arm comes up.
-    const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
-    leftPt = shL0.clone().add(new THREE.Vector3(...SPREAD_HANG_L).multiplyScalar(g.spec.H / 1.72)).lerp(leftPt, navW);
+    // Spread feet: in every beat the left hand lies on the curve of their own left hip, heel at the top, fingers down
+    // and a little forward round it.
+    const A = scn.hipL, p = g.mesh.boneTransform(A.index, new THREE.Vector3()).applyMatrix4(g.mesh.matrixWorld);
+    const M = g.bones.pelvis.matrixWorld.clone().multiply(g.mesh.skeleton.boneInverses[BONES.indexOf('pelvis')]);
+    const n = A.n.clone().transformDirection(M);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(g.group.quaternion);
+    hipSelf = { p: p.addScaledVector(n, 0.0085 * g.spec.H + 0.002), n, f: new THREE.Vector3(0, -1, 0).addScaledVector(fwd, 0.35).normalize() };
+    leftPt = hipSelf.p.clone();
   }
   if (scn.atHead) {
     const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
@@ -3057,7 +3073,7 @@ function updateScene(scn, dt) {
   // Over the case, bucking away from the paddle: the hips move under the resting left hand, which holds its place.
   if (scn.atCase && !scn.atHead && !scn.atKnees && scn.buck) leftPt.addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), -s.spec.H / 1.58 * scn.reaction)
     .addScaledVector(new THREE.Vector3(...CASE_BUCK.leftHand), s.spec.H / 1.58 * clamp(swing - 1, 0, 1));   // (and a little up and toward the disciplinarian, as set)
-  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atHead || scn.atSpread ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
+  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atSpread ? 0 : scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
   let restPt = knee.p;
   const thighN = scn.atHead ? giverRight : knee.n;
   // Far-side (right) strikes: the disciplinarian turns their shoulders toward the
@@ -3465,7 +3481,7 @@ function updateScene(scn, dt) {
     setPress(s, faceW, strikeFit.n, (T.halfW + 0.015) / 0.55, amt, '', strikeFit.a, T.halfLen - T.halfW, deep);
   }
   const shL = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
-  if (scn.atSpread && navW < 0.98) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(...SPREAD_HANG_POLE_L)), null, null, giverRight.clone().negate());   // hanging: palm to the thigh
+  if (scn.atSpread) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(...SPREAD_HANG_POLE_L)), hipSelf.n, hipSelf.f);   // on their own hip
   else if (scn.atHead && navW < 0.98) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), null, null, giverRight);   // hanging: palm to the thigh
   else armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), backN, scn.atHead ? HEAD_NAVEL_FINGERS : fingersFwd);
 
@@ -3480,7 +3496,8 @@ function updateScene(scn, dt) {
     scn.curl = { L: null, R: null };
   }
   const onSkin = idx => { const pts = posePatch(s, idx); return q => skinSignedDist(pts, q); };
-  const wantL = scn.atHead && navW < 0.5 ? 12 : wrapFingers(g, 'L', onSkin(scn.patch.back));
+  if (scn.atSpread && !scn.patch.hipL) scn.patch.hipL = skinPatch(g, scn.hipL.index, 0.14);
+  const wantL = scn.atSpread ? wrapFingers(g, 'L', (pts => q => skinSignedDist(pts, q))(posePatch(g, scn.patch.hipL))) : scn.atHead && navW < 0.5 ? 12 : wrapFingers(g, 'L', onSkin(scn.patch.back));
   const wantR = tool ? (tool.grip || IMPLEMENTS[scn.implement].grip).curl   // closed round the implement's handle
     : swing < 0.3 ? (scn.atHead ? 12 : wrapFingers(g, 'R', onSkin(scn.patch.knee)))
     : swing > 1.9 ? wrapFingers(g, 'R', onSkin(scn.patch[scn.side])) : 4;
