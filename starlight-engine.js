@@ -2371,6 +2371,7 @@ const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
 const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
 const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
 const KNEES_UP = 12;
+const KNEES_PRESS_DEPTH = 0.003;   // the palm sinks this far into the skin at contact (12 mm elsewhere): the bent-over rear is steeper, so less
 // The swinging hand's rest (pose-editor report, 12:54), measured from the right shoulder (m, for a 1.72 m
 // disciplinarian; world axes before any lean): the empty hand hangs close by the near hip, the brush hangs at the
 // side pointing forward, its face toward the subject. `at` is where the hand goes (the palm, as the rest
@@ -3039,7 +3040,7 @@ function updateScene(scn, dt) {
   // shader flattens the skin under the palm (see setPress) so it compresses rather
   // than clipping. Candidate forearm lines that pass through the subject's body are
   // rejected, which pushes the elbow away from the body when needed.
-  const PRESS_DEPTH = 0.012;
+  const PRESS_DEPTH = scn.atKnees ? KNEES_PRESS_DEPTH : 0.012;
   const palmHalf = 0.0085 * g.spec.H;
   const pelvisM = s.bones.pelvis.matrixWorld.clone().multiply(s.mesh.skeleton.boneInverses[BONES.indexOf('pelvis')]);
   const sideSign = scn.side === 'L' ? 1 : -1;
