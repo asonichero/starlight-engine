@@ -1547,8 +1547,10 @@ function makeBodyMaterial(m) {
             sadd += uStripeA[si] * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
           }
           sadd *= rear * cleft;
-          stripeCol = mix(uMarkCol, uMarkCol * vec3(0.45, 0.35, 0.4), smoothstep(0.4, 0.95, sadd));   // deepens within red
-          mk = max(mk, min(1.0, sadd * 1.0));
+          // Added on top of whatever marks are already there (a more localised deepening of the same colour), and the red deepens
+          // as the total builds.
+          mk = min(1.0, mk + sadd);
+          stripeCol = mix(uMarkCol, uMarkCol * vec3(0.45, 0.35, 0.4), smoothstep(0.35, 0.95, mk) * step(0.0001, sadd));
           outfitStripe = stripeCol;
         }
         vec3 outfitCol = mix(uSkin, uStripeN > 0.0 && mk > 0.0 ? mix(uMarkCol, outfitStripe, step(0.0001, mk)) : uMarkCol, mk);
@@ -2966,6 +2968,18 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     if (scn.atCase && !scn.atHead && !scn.atKnees) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
     scn.toolFix = {}; scn.fitCache.B = null; scn.handQ = null;
+    // The rod's own contact settings (ROD_CONTACT), restored for any other implement.
+    if (!scn.contact0) scn.contact0 = scn.wideContact;
+    const rc = name === 'rod' ? ROD_CONTACT[scn.atHead ? 'head' : scn.atKnees ? 'knees' : scn.atCase ? 'case' : 'lap'] : null;
+    if (!scn.raised0) scn.raised0 = scn.wideRaised;
+    scn.wideRaised = name === 'rod' && scn.atSpread ? { ...scn.raised0, ...ROD_RAISED_SPREAD } : scn.raised0;
+    scn.wideContact = rc ? { ...scn.contact0, ...(rc.roll != null ? { roll: rc.roll, keepRoll: true } : {}), elbow: rc.elbow } : scn.contact0;
+    if (scn.atHead) {
+      const shift = rc && rc.at ? [rc.at[0] - HEAD_GIVER_AT[0], rc.at[1] - HEAD_GIVER_AT[1]] : [0, 0], was = scn.giverShift || [0, 0];
+      g.group.position.x += shift[0] - was[0]; g.group.position.z += shift[1] - was[1]; scn.giverShift = shift;
+      scn.yawStrike = rc && rc.yawStrike != null ? rc.yawStrike : HEAD_YAW_STRIKE;
+      g.group.updateMatrixWorld(true);
+    }
     // Middle and end finger joints closed round the handle (or straightened again).
     setFingerBend(g, 'R', scn.tool ? (scn.tool.grip || IMPLEMENTS[name].grip).bend : 0);
     if (scn.tool && scn.curl) scn.curl.R = (scn.tool.grip || IMPLEMENTS[name].grip).curl;
@@ -3031,7 +3045,7 @@ function updateScene(scn, dt) {
   // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
   // subject's hips as the arm comes up (about the vertical through the pelvis, so the feet stay put).
   if (scn.atHead) {
-    const yaw = lerp(HEAD_YAW_RELAXED, HEAD_YAW_STRIKE, easeInOut(clamp(swing / 0.6, 0, 1)));
+    const yaw = lerp(HEAD_YAW_RELAXED, scn.yawStrike != null ? scn.yawStrike : HEAD_YAW_STRIKE, easeInOut(clamp(swing / 0.6, 0, 1)));
     g.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw * Math.PI / 180);
     g.group.updateMatrixWorld(true);
   }
@@ -3771,6 +3785,19 @@ const ROD_DEPTH = 0.004;
 // How far (× the glute's height) the rod's strikes reach: from this far down from the top of the glute to this far down the thigh
 // below the fold. Strikes favour the upper half of that range (ROD_UPPER of them land there).
 const ROD_REACH = 0.25, ROD_UPPER = 0.7;
+// The rod's own contact settings per position (pose-editor reports, 14:49, Kenji with Aya): `roll` is the angle its face turns
+// from straight down about the line between the sites (where the default is the surface's own normal), `elbow` the upper
+// arm's direction from the shoulder in the torso's frame, and, for hands on head, where the disciplinarian stands (`at`, m)
+// and the strike's turn (`yawStrike`, degrees), which then holds for every beat.
+// The rod raised in the spread-feet position (14:54 report, Kenji with Aya): the face centre from the right shoulder (m, 1.7 m
+// tall), its normal and long axis (world), and the upper arm's direction from the shoulder (the elbow out to the side).
+const ROD_RAISED_SPREAD = { face: [-0.122, 0.447, 0.164], faceN: [-0.323, -0.377, 0.868], axis: [0.830, 0.329, 0.451], elbow: [-0.987, 0.162, -0.011] };
+const ROD_CONTACT = {
+  lap:  { roll: 52.9, elbow: [-0.22, -0.612, -0.76] },
+  case: { roll: 82.5, elbow: [-0.143, -0.882, 0.449] },
+  head: { elbow: [0.231, -0.71, 0.665], at: [-0.249, -0.493], yawStrike: 1 },
+  knees: { elbow: [-0.153, -0.881, 0.447] },
+};
 const ROD = { len: 0.43, width: 0.010, thick: 0.010, corner: 0.004, neck: 0, handle: 0.115, handleW: 0.010, butt: 0.012, lean: 0.25, seat: 0.02 };
 function buildRod(g) { return buildPaddle(g, true); }
 // A strike height along the rod's strip (0 … 11): ROD_UPPER of rolls fall in the upper half, the rest in the lower.
@@ -4140,7 +4167,7 @@ function wideFit(scn, posed, shR, palm) {
   // The rod lies along the skin where it lands: its face is the sites' mean surface normal (squared to the line between them),
   // not a set roll, since the surface turns up the height of the glutes.
   let cn = nAt(W_.roll);
-  if (T.rod) { cn = sL.n.clone().add(sR.n).normalize(); cn.addScaledVector(line, -cn.dot(line)).normalize(); }
+  if (T.rod && !W_.keepRoll) { cn = sL.n.clone().add(sR.n).normalize(); cn.addScaledVector(line, -cn.dot(line)).normalize(); }
   const cb = cn.clone().cross(line);
   const cc = mid.clone().addScaledVector(line, W_.slide * g.spec.H / 1.7).addScaledVector(cb, T.rod ? 0 : -W_.drop * g.spec.H / 1.7);
   let hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
