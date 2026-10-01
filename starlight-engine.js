@@ -2341,6 +2341,14 @@ const poseTable = (base, beats) => Object.fromEntries(Object.keys(beats).map(k =
 const CASE_SUBJ_BASE_Q = poseQuats(CASE_SUBJECT_BASE);
 const CASE_SUBJ_REACT_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_SUBJECT_REACT), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_SUBJECT_REACT)) };
 CASE_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(CASE_SUBJ_REACT_Q.L).map(b => [b, CASE_SUBJ_REACT_Q.L[b].clone().slerp(CASE_SUBJ_REACT_Q.R[b], 0.5)]));
+// The paddle's reaction over the case (from a pose-editor report) is a buck, not the other implements'
+// reaction: the hips come forward and sink, the knees bend and the feet stay planted where they are (the feet
+// turn to stay flat). `shift` is the body's move at full reaction (m, for a 1.58 m subject; world axes).
+const CASE_BUCK = { shift: [0.066, -0.025, -0.009],
+  spine1: [-12.4, 0, 0], spine2: [-10.9, 0, 0],
+  thighL: [-87.5, -1, -3], thighR: [-87.5, 1, 3], shinL: [22.7, 0, 0], shinR: [22.7, 0, 0], footL: [-16.9, 0, 0], footR: [-16.9, 0, 0] };
+const CASE_BUCK_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_BUCK), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_BUCK)) };
+CASE_BUCK_Q.B = Object.fromEntries(Object.keys(CASE_BUCK_Q.L).map(b => [b, CASE_BUCK_Q.L[b].clone().slerp(CASE_BUCK_Q.R[b], 0.5)]));
 const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
 
 // ── Hands on head ──────────────────────────────────────────────
@@ -2697,6 +2705,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), CASE_PITCH * Math.PI / 180));
     standAt(s, q, new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
+    scn.subjBasePos = s.group.position.clone();
     // The lid is set from the subject's own height, and runs from just short of the palms
     // to well past them.
     scn.caseTop = opts.caseHeight || s.spec.Y.hipJoint * 0.88;
@@ -2772,7 +2781,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     if (!IMPLEMENTS[name]) name = 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
-    scn.buck = !!(scn.atHead && name === 'paddle');   // hands on head: the paddle's reaction differs (HEAD_BUCK)
+    scn.buck = !!(scn.atCase && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
+    if (scn.atCase && !scn.atHead) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
     scn.toolFix = {}; scn.fitCache.B = null; scn.handQ = null;
     // Middle and end finger joints closed round the handle (or straightened again).
@@ -2858,6 +2868,9 @@ function updateScene(scn, dt) {
     s.group.quaternion.copy(qz).multiply(scn.subjBaseQ);
     s.group.position.copy(scn.subjBasePos).sub(scn.feetPivot).applyQuaternion(qz).add(scn.feetPivot);
     if (!scn.buck) s.group.position.y += HEAD_RISE * (s.spec.H / 1.58) * scn.reaction;
+  } else if (scn.atCase && scn.buck) {
+    // Over the case, bucking away from the paddle: the body moves, the feet stay put (the legs' pose does that).
+    s.group.position.copy(scn.subjBasePos).addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), s.spec.H / 1.58 * scn.reaction);
   }
   s.group.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
