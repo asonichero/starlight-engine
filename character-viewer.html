@@ -152,7 +152,10 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="starlight-engine.js?v=case-2"></script>
+<script>
+// The engine changes often; always fetch it fresh so a cached copy never hides a change.
+document.write('<script src="starlight-engine.js?v=' + Date.now() + '"><\/script>');
+</script>
 <script>
 (function () {
 'use strict';
