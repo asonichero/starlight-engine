@@ -2360,7 +2360,13 @@ const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
 // brush, only the head moves; struck with the paddle the knees give lightly and the body leans forward, the feet
 // staying planted (the legs are solved to keep them there, see kneesBody).
 const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
-const KNEES_BUCK = { dx: 0.03, dy: -0.045, pitch: 6 };   // the paddle's buckle: m forward and down, degrees of lean (1.58 m subject)
+// From pose-editor reports (Kiko, 1.58 m; scaled by height): the pelvis sits 5.8 cm back and 1.1 cm lower than stood and
+// the ankles come in 6.8 cm (left) and 9.2 cm (right) toward the hips, so the legs are more upright over the feet.
+// Struck with the hand or hair brush the pelvis comes forward 4.1 cm and 0.3 cm up (the ankles stay); struck with
+// the paddle the hip bend reduces by KNEES_UP degrees and the subject comes up, the pelvis and feet staying put.
+const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
+const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
+const KNEES_UP = 7;
 const KNEES_SUBJECT_BASE = {
   // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
   thighL: [KNEES_LEG_BACK - KNEES_PITCH, 0, -4], thighR: [KNEES_LEG_BACK - KNEES_PITCH, 0, 4], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [-KNEES_LEG_BACK, 0, 0], footR: [-KNEES_LEG_BACK, 0, 0],
@@ -2369,7 +2375,7 @@ const KNEES_SUBJECT_BASE = {
   fingersL: [0, 0, -35], fingersR: [0, 0, 35],
 };
 // Only the head moves when struck.
-const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, neck: [-44, 0, 0], head: [-16, 0, 0] };
+const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, spine2: [-12.8, 0, -0.5], neck: [-44, 0, 0], head: [-16, 0, 0] };
 const KNEES_BASE_Q = poseQuats(KNEES_SUBJECT_BASE);
 const KNEES_REACT_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_SUBJECT_REACT), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_SUBJECT_REACT)) };
 KNEES_REACT_Q.B = Object.fromEntries(Object.keys(KNEES_REACT_Q.L).map(b => [b, KNEES_REACT_Q.L[b].clone().slerp(KNEES_REACT_Q.R[b], 0.5)]));
@@ -2480,17 +2486,20 @@ function buildCase(top, x0, x1) {
 // where they were (the knee forward of the line from hip to ankle, the sole flat).
 function kneesBody(scn, k) {
   const s = scn.s, sc = s.spec.H / 1.58, DEG = Math.PI / 180;
-  const pitch = KNEES_PITCH + KNEES_BUCK.pitch * k;
+  const up = scn.buck;   // the paddle: the subject comes up (less hip bend) instead of moving forward
+  const pitch = KNEES_PITCH - (up ? KNEES_UP * k : 0);
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
     .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch * DEG));
   const pel = new THREE.Vector3(...s.spec.J.pelvis).applyQuaternion(q);
-  const target = scn.kneesPelvis.clone().add(new THREE.Vector3(KNEES_BUCK.dx * k * sc, KNEES_BUCK.dy * k * sc, 0));
+  const target = scn.kneesPelvis.clone().add(new THREE.Vector3(...KNEES_STANCE.pelvis).multiplyScalar(sc));
+  if (!up) target.add(new THREE.Vector3(...KNEES_CONTACT.pelvis).multiplyScalar(sc * k));
   s.group.quaternion.copy(q);
   s.group.position.copy(target).sub(pel);
   s.group.updateMatrixWorld(true);
   for (const side of ['L', 'R']) {
     const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
-    const H = th.getWorldPosition(new THREE.Vector3()), A = scn.kneesAnkle[side];
+    const H = th.getWorldPosition(new THREE.Vector3()), A = scn.kneesAnkle[side].clone();
+    A.x += (side === 'L' ? KNEES_STANCE.ankleL : KNEES_STANCE.ankleR) * sc;
     const L1 = sh.position.length(), L2 = ft.position.length();
     const dx = A.x - H.x, dy = H.y - A.y;
     const d = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * 0.999);
@@ -2933,7 +2942,7 @@ function updateScene(scn, dt) {
     // Over the case, bucking away from the paddle: the body moves, the feet stay put (the legs' pose does that).
     s.group.position.copy(scn.subjBasePos).addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), s.spec.H / 1.58 * scn.reaction);
   }
-  if (scn.atKnees) kneesBody(scn, scn.buck ? scn.reaction : 0);
+  if (scn.atKnees) kneesBody(scn, scn.reaction);
   s.group.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
 
