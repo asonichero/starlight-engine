@@ -2943,7 +2943,14 @@ function updateScene(scn, dt) {
     // held until the reaction has settled, rather than following the shoulders.
     let palmPt = scn.atCase ? casePalm(s, side, scn.caseTop) : new THREE.Vector3(sh.x + 0.07 * sH, 0.012 * sH, sh.z + out * 0.06 * sH);
     if (!scn.plant[side] || scn.reaction < 0.02) scn.plant[side] = palmPt.clone();
-    else palmPt = scn.plant[side].clone();
+    else {
+      const slideTo = palmPt;
+      palmPt = scn.plant[side].clone();
+      // Over the case the palm stays on the lid however the body moves: it holds its place while
+      // the arm can reach it, and slides back along the lid, flat, when the shoulders rise or draw
+      // away (casePalm is where a nearly straight arm from the shoulder as it is now would land).
+      if (scn.atCase) palmPt.x = Math.min(palmPt.x, slideTo.x);
+    }
     // The flat-palm IK solves for the wrist (palm centre minus half a hand along the
     // fingers), so test reach to that point, not to the palm centre.
     const wristPt = palmPt.clone().addScaledVector(new THREE.Vector3(1, 0, 0), -sHand * 0.42);
@@ -3050,7 +3057,7 @@ function updateScene(scn, dt) {
   const poleStrike = strikeFit.E.clone().sub(shR);
   // (A wide implement's elbow starts where its rest fit puts it.)
   const poleUp = wide ? wideUp.pole : POLE_RAISED;
-  const poleOff = swing <= 1 ? (wide ? wideRest.E.clone().sub(shR) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
+  const poleOff = swing <= 1 ? (wide ? (wideRest.pole || wideRest.E.clone().sub(shR)) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
   const poleR = shR.clone().add(poleOff);
   // Swinging hand: flat on the thigh at rest; palm forward when raised, turning
   // toward the target during the strike; flat on the target, wrist straight, at contact.
@@ -3596,7 +3603,7 @@ const CASE_WIDE_CONTACT = { roll: 82.5, yaw: 0, slide: 0, drop: 0.01, depth: 0.0
 // The blade at rest over the case, from the viewer's pose editor (Kenji with Aya): held low at the
 // right side, its face turned toward the subject. Face centre from the right shoulder (m, for 1.7 m
 // tall), the face's normal and long axis, all in the frame before the disciplinarian's yaw.
-const CASE_WIDE_REST = { face: [0.001, -0.661, 0.201], faceN: [0.967, -0.191, -0.167], axis: [0.135, -0.171, 0.976], elbow: [-0.077, -0.997, -0.037] };
+const CASE_WIDE_REST = { face: [0.001, -0.661, 0.201], faceN: [0.967, -0.191, -0.167], axis: [0.135, -0.171, 0.976], elbow: [-0.174, -0.956, -0.237] };
 function caseWideRest() {
   const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
   const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
@@ -3700,7 +3707,7 @@ function wideFit(scn, posed, shR, palm) {
     // The elbow goes to the candidate nearest the set direction (the upper arm hanging by the side).
     const Er = shR.clone().addScaledVector(new THREE.Vector3(...R.elbow).normalize(), L1);
     rest = restCands.reduce((m, c) => !m || c.E.distanceTo(Er) < m.E.distanceTo(Er) ? c : m, null);
-    Object.assign(rest, { palmC: rest.P, faceRest: faceR.clone() });
+    Object.assign(rest, { palmC: rest.P, faceRest: faceR.clone(), pole: new THREE.Vector3(...R.elbow).normalize().multiplyScalar(0.5) });
   } else {
     let roll = { e: Infinity };
     for (let th = -78; th <= 78; th += 6) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
