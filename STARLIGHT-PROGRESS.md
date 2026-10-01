@@ -467,3 +467,6 @@ The game and viewer were driven headless in Chrome with puppeteer. Test hooks ar
 - **Paddle:** lap only (`IMPLEMENTS.paddle.lapOnly`). Its rest and contact fits use the seat's geometry; over the case it falls back to the hand, and the viewer disables the button.
 - **Viewer:** a Position choice (Across the lap / Over the case) in the Discipline scene section.
 - **Checked** headlessly (Aya→Kiko, Kenji→Rin): relaxed, raised and contact on both sides, hand and hair brush, with the shorts down; a 10-smack loop ran without errors. Not done: the game (`starlight-game.html`) doesn't use the case position yet, and the reaction pose (`CASE_SUBJECT_REACT`) has only had a first look.
+
+- **Fingers compress the skin (all positions):** `setFingerCaps` hands the skin shader up to `CAPS` finger capsules (`uCapA`/`uCapB`). Skin inside one is pushed in along its own normal until it clears the finger, so fingers dent the flesh as the palm plane does. The resting left hand is always on; the swinging hand ramps in at contact and is off while an implement is held (its fingers are round the handle). The thumb isn't included yet.
+- **Over-the-case legs:** from a pose-editor report, the subject's legs are nearly straight (thighs −80°, shins −2°, feet flat) in the base pose and the reaction alike, so toes and heels both meet the floor.

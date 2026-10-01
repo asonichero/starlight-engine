@@ -338,6 +338,7 @@ function ringFromCirc(C, [aspect, fb, bb]) {
 // Fingers, index to little: [offset across the palm in pitches, length × hand
 // length, radius × height, knuckle set back toward the wrist × hand length].
 const FINGERS = [[1.45, 0.40, 0.0043, 0.012], [0.48, 0.44, 0.0046, 0], [-0.48, 0.42, 0.0044, 0.012], [-1.42, 0.33, 0.0039, 0.05]];
+const CAPS = 16;               // finger capsules the skin shader can press against
 const FINGER_PITCH = 0.0103;    // × height
 const FINGER_ROOT = 0.56;       // knuckle line, × hand length from the wrist
 // Thumb (rigid, on the hand bone), base to tip: [along the hand × hand length, toward the
@@ -1416,6 +1417,10 @@ function makeBodyMaterial(m) {
     // Second slot, for the resting left hand (same rule).
     uPressP2: { value: new THREE.Vector3() }, uPressN2: { value: new THREE.Vector3(0, 1, 0) },
     uPressR2: { value: 0.06 }, uPressAmt2: { value: 0 },
+    // Fingers pressing the skin: up to CAPS capsules (mesh-local; A = start xyz + radius, B = end xyz
+    // + how far in contact, 0–1). Skin inside one is pushed in along its own normal until it
+    // clears the finger, so a pad dents the flesh the way the palm plane does.
+    uCapA: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapB: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapN: { value: 0 },
     // Contact: the partner's posed proxies (see CONTACT; set by updateContacts).
     uCE: { value: Array.from({ length: CONTACT_ELL * 4 }, () => new THREE.Vector4()) },
     uCC: { value: Array.from({ length: CONTACT_CONE * 2 }, () => new THREE.Vector4()) },
@@ -1440,7 +1445,7 @@ function makeBodyMaterial(m) {
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;' + CONTACT_GLSL + FINGER_BEND_GLSL)
+      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;\nuniform vec4 uCapA[' + CAPS + '], uCapB[' + CAPS + '];\nuniform float uCapN;' + CONTACT_GLSL + FINGER_BEND_GLSL)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 fbPos = vec3(position);\nbendFingers(fbPos, objectNormal);')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = fbPos;\nvLayerA = layerA; vLayerB = layerB; vHair = hairCov; vRest = position; vCrease = creaseD;')
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
@@ -1476,6 +1481,20 @@ function makeBodyMaterial(m) {
             float flatQ = wQ * smoothstep(-0.004, 0.004, hQ);
             vNormal = normalize(mix(vNormal, normalize(normalMatrix * uPressN2), flatQ));
           #endif
+        }
+        // Fingers: skin inside a finger capsule is pushed in along its own normal until it
+        // clears the finger (a dent as deep as the finger is round), fading out past its edge.
+        for (int ci = 0; ci < ${CAPS}; ci++) {
+          if (float(ci) >= uCapN) break;
+          vec3 pa = uCapA[ci].xyz, ba = uCapB[ci].xyz - pa;
+          float rC = uCapA[ci].w;
+          float hh = clamp(dot(transformed - pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
+          vec3 dd = transformed - (pa + ba * hh);
+          float hN = dot(dd, objectNormal);                    // below the finger's axis is negative
+          float xx = length(dd - hN * objectNormal);
+          float dent = max(sqrt(max(rC * rC - xx * xx, 0.0)) + hN, 0.0);
+          float wC = (1.0 - smoothstep(rC * 0.9, rC * 1.35, xx)) * (1.0 - smoothstep(0.0, 0.6 * rC, hN)) * uCapB[ci].w;
+          transformed -= objectNormal * dent * wC;
         }` + CONTACT_VERTEX);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
@@ -2095,7 +2114,7 @@ function resetCharacter(ch, pose = 'Relaxed') {
   ch.group.rotation.set(0, 0, 0);
   ch.group.visible = true;
   const u = ch.mesh.material.userData.uniforms;
-  u.uPressAmt.value = 0; u.uPressAmt2.value = 0;
+  u.uPressAmt.value = 0; u.uPressAmt2.value = 0; u.uCapN.value = 0;
   ch.jig = null;
   ch.dancer = null;
   ch.handsOnHead = false;
@@ -2291,13 +2310,15 @@ const GIVER_Q = Object.fromEntries(Object.keys(GIVER_BEAT).map(k => [k, poseQuat
 // Everything else about the scene (strike fit, press, marks) is shared with the lap.
 const CASE_PITCH = 84;   // degrees the torso is pitched forward from upright
 const CASE_SUBJECT_BASE = {
-  thighL: [-CASE_PITCH, 0, -4], thighR: [-CASE_PITCH, 0, 4], shinL: [6, 0, 0], shinR: [6, 0, 0], footL: [-6, 0, 0], footR: [-6, 0, 0],
+  // Legs from a pose-editor report: nearly straight, the soles flat so toes and heels both meet the floor.
+  thighL: [-80, -1, -3], thighR: [-80, 1, 3], shinL: [-2, 0, 0], shinR: [-2, 0, 0], footL: [1, 0, 0], footR: [0, 0, 0],
   spine1: [-3, 0, 0], spine2: [-4, 0, 0], neck: [-40, 0, 0], head: [-14, 0, 0],
   upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
 };
-// Struck: the hips jump forward and the back hollows, the head comes up, the knees give.
+// Struck: the hips jump forward and the back hollows, the head comes up. The legs are the
+// base pose's: they stay straight and planted.
 const CASE_SUBJECT_REACT = {
-  thighL: [-CASE_PITCH - 6, 0, -4], thighR: [-CASE_PITCH - 10, 0, 4], shinL: [16, 0, 0], shinR: [26, 0, 0], footL: [-16, 0, 0], footR: [-26, 0, 0],
+  thighL: CASE_SUBJECT_BASE.thighL, thighR: CASE_SUBJECT_BASE.thighR, shinL: CASE_SUBJECT_BASE.shinL, shinR: CASE_SUBJECT_BASE.shinR, footL: CASE_SUBJECT_BASE.footL, footR: CASE_SUBJECT_BASE.footR,
   spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-48, 0, 0], head: [-16, 0, 0],
   upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
 };
@@ -2676,7 +2697,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   scn.dispose = () => {
     if (scn.bench) { parent.remove(scn.bench); scn.bench.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.bench = null;
-    for (const ch of [g, s]) { const u = ch.mesh.material.userData.uniforms; u.uPressAmt.value = 0; u.uPressAmt2.value = 0; }
+    for (const ch of [g, s]) { const u = ch.mesh.material.userData.uniforms; u.uPressAmt.value = 0; u.uPressAmt2.value = 0; u.uCapN.value = 0; }
     setSkirtOff(s, false);
     setLowered(s, 'bottom', false);
     scn.setImplement('hand');   // the implement is put down
@@ -3126,6 +3147,11 @@ function updateScene(scn, dt) {
   // A wide implement's fingers take WIDE_RAISED's pose toward the top of the swing.
   const up = wide ? clamp(1 - Math.abs(swing - 1), 0, 1) : 0;
   if (up > 0) { g.bones.fingersR.quaternion.slerp(degQ(WIDE_RAISED.fingers), up); g.bones.fingersR.updateMatrixWorld(true); }
+  // The fingers dent the skin they press, as the palm does: the resting left hand always,
+  // the swinging hand once it's on the skin (not when it holds an implement: its fingers
+  // are round the handle, and the implement presses the skin through the palm's press).
+  setFingerCaps(s, g, 'L', 1);
+  if (!tool) setFingerCaps(s, g, 'R', clamp((swing - 1.75) / 0.25, 0, 1), true);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -3910,6 +3936,27 @@ function setPress(ch, pointW, normalW, radius, amount, slot = '', axisW = null, 
     u.uPressDepth.value = depth;
     if (!axisW) u.uPressAx.value.set(0, 0, 0, 0);
     else { const ax = axisW.clone().transformDirection(inv); u.uPressAx.value.set(ax.x, ax.y, ax.z, halfLen); }
+  }
+}
+
+// Presses `ch`'s skin against the four fingers of `hand`'s `side` hand, at the hand's current
+// curl, `amount` (0–1) in contact. Several hands add up: pass `append` to keep the earlier
+// ones. The fingers are straight capsules on the finger bone, as built (see FINGERS).
+function setFingerCaps(ch, hand, side, amount, append = false) {
+  const u = ch.mesh.material.userData.uniforms, H = hand.spec.H;
+  if (!append) u.uCapN.value = 0;
+  if (amount <= 0) return;
+  const fb = hand.bones['fingers' + side], inv = ch.mesh.matrixWorld.clone().invert();
+  fb.updateMatrixWorld(true);
+  const dir = fb.position.clone().normalize(), across = new THREE.Vector3(0, 0, 1), handLen = 0.106 * H;
+  for (const [off, lenF, rF, back] of FINGERS) {
+    if (u.uCapN.value >= CAPS) return;
+    const r = rF * H * 0.95;
+    const k0 = dir.clone().multiplyScalar(-handLen * back).addScaledVector(across, off * FINGER_PITCH * H);
+    const a = k0.clone().addScaledVector(dir, r), b = k0.clone().addScaledVector(dir, handLen * lenF - r);
+    const i = u.uCapN.value++;
+    u.uCapA.value[i].set(...fb.localToWorld(a).applyMatrix4(inv).toArray(), r);
+    u.uCapB.value[i].set(...fb.localToWorld(b).applyMatrix4(inv).toArray(), amount);
   }
 }
 
