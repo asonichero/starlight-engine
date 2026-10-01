@@ -3870,7 +3870,7 @@ function buildPaddle(g, rod = false) {
     geo.translate(0, 0, -(P.thick - 2 * bev) / 2);
   }
   geo.computeVertexNormals();
-  const wood = new THREE.MeshStandardMaterial({ color: lin(rod ? 0x3a2a1c : 0x6e4424), roughness: rod ? 0.35 : 0.5, metalness: 0 });
+  const wood = new THREE.MeshStandardMaterial({ color: lin(rod ? 0xc99a5b : 0x6e4424), roughness: rod ? 0.4 : 0.5, metalness: 0 });
   const board = new THREE.Mesh(geo, wood);
   board.position.copy(gripC);
   board.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(d, w, palmN));
