@@ -2330,6 +2330,11 @@ const CASE_GIVER_BEAT = {
   raised:  { spine1: [12, 0, 0], spine2: [4, 8, 0], neck: [4, 0, 0] },
   contact: { spine1: [20, 0, 0], spine2: [10, -4, 0], neck: [6, 0, 0] },
 };
+// From pose-editor reports. At rest the swinging hand floats just off the near cheek (CASE_REST_HOVER
+// m above the skin) with the thumb tucked; the left thumb lies along the back; a far-side strike
+// leans the spine forward a further CASE_FAR_LEAN degrees and lifts the right shoulder a little.
+const CASE_REST_HOVER = 0.016, CASE_REST_THUMB = [-54, 58, 33], CASE_THUMB_L = [11.2, -1, -8.9];
+const CASE_FAR_LEAN = 9.7, CASE_FAR_CLAV = [-0.3, -3.8, 6.2];
 const CASE_YAW = -35;      // the disciplinarian's turn toward the subject's hips, degrees
 const CASE_GIVER_AT = [0, -0.44];   // where the disciplinarian's pelvis stands (x, z)
 const poseTable = (base, beats) => Object.fromEntries(Object.keys(beats).map(k => [k, poseQuats(base, beats[k])]));
@@ -2778,7 +2783,7 @@ function updateScene(scn, dt) {
   };
   const shoulders = posed(scn.atCase ? 'lowback' : 'shoulders'), glute = posed('glute');
   // The resting hand takes the thigh nearer the disciplinarian (subject's left, toward −Z).
-  const knee = posed(scn.atCase ? 'glute' : 'kneeL');   // over the case the hand rests on the hip instead
+  const knee = posed(scn.atCase ? 'cheekL' : 'kneeL');   // over the case the hand rests by the near cheek instead
   // Left hand: same no-clip rule as the strike — palm set slightly below the skin,
   // and the skin under it compressed onto the palm plane.
   const REST_DEPTH = 0.008;
@@ -2797,6 +2802,11 @@ function updateScene(scn, dt) {
     const upAxis = new THREE.Vector3(0, 1, 0);
     rotateBoneWorld(g.bones.spine1, new THREE.Quaternion().setFromAxisAngle(upAxis, turnAmt * 0.45));
     rotateBoneWorld(g.bones.spine2, new THREE.Quaternion().setFromAxisAngle(upAxis, turnAmt * 0.55));
+    if (scn.atCase) {
+      const f = turnAmt / FAR_TURN;
+      g.bones.spine2.rotateX(CASE_FAR_LEAN * Math.PI / 180 * f);
+      g.bones.clavR.quaternion.multiply(new THREE.Quaternion().slerp(degQ(CASE_FAR_CLAV), f));
+    }
     g.group.updateMatrixWorld(true);
   }
   const shR = g.bones.upperArmR.getWorldPosition(new THREE.Vector3());
@@ -2980,7 +2990,7 @@ function updateScene(scn, dt) {
   // offsets, with the fingers forward, plus a correction learnt at rest (below).
   const REST_TILT = 18 * Math.PI / 180;
   const restSkin = restPt.clone().addScaledVector(thighN, -palm);
-  let restAt = restPt;
+  let restAt = scn.atCase && !tool ? restPt.clone().addScaledVector(thighN, CASE_REST_HOVER) : restPt;
   // A wide implement rests across both sites, flat on the seat (its fit's `rest`), lifted
   // off the skin to REST_GAP (no compression), plus its own correction learnt at rest.
   const wideRest = wide ? strikeFit.rest : null;
@@ -3133,7 +3143,7 @@ function updateScene(scn, dt) {
   // open in between.
   if (!scn.patch) {
     const A = scn.anchors;
-    scn.patch = { back: skinPatch(s, (scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.glute : A.kneeL).index, 0.14),
+    scn.patch = { back: skinPatch(s, (scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.cheekL : A.kneeL).index, 0.14),
       L: skinPatch(s, A.foldL[STRIKE_K].index, 0.16), R: skinPatch(s, A.foldR[STRIKE_K].index, 0.16) };
     scn.curl = { L: null, R: null };
   }
@@ -3146,6 +3156,12 @@ function updateScene(scn, dt) {
   for (const [side, want] of [['L', wantL], ['R', wantR]]) {
     scn.curl[side] = scn.curl[side] == null ? want : scn.curl[side] + (want - scn.curl[side]) * k;
     setFingerCurl(g, side, scn.curl[side]);
+  }
+  if (scn.atCase) {
+    g.bones.thumbL.quaternion.copy(degQ(CASE_THUMB_L));
+    // The resting hand's thumb is tucked in, easing out as the hand lifts to swing.
+    if (!tool && !wide) g.bones.thumb2R.quaternion.slerp(degQ(CASE_REST_THUMB), clamp(1 - swing / 0.3, 0, 1));
+    g.bones.thumbL.updateMatrixWorld(true); g.bones.thumb2R.updateMatrixWorld(true);
   }
   if (tool && tool.thumbQ) { g.bones.thumbR.quaternion.copy(tool.thumbQ[0]); g.bones.thumb2R.quaternion.copy(tool.thumbQ[1]); }   // round the handle
   // A wide implement's fingers take WIDE_RAISED's pose toward the top of the swing.
@@ -3819,6 +3835,8 @@ function sceneAnchors(s) {
     glute: toSurface('pelvis', [0, Y.hip - 0.03 * H, 0]),
     // Over the case the resting left hand lies on the small of the back.
     lowback: toSurface('spine1', [0, Y.waist - 0.02 * H, 0]),
+    // ... and the swinging hand rests by the near cheek (the subject's left, as the strike strip's x).
+    cheekL: toSurface('pelvis', [hipA * 0.42, Y.hip - 0.03 * H, 0]),
     // A short strip of candidates per side, from the fold (index 0) up toward the
     // glute; the strike search prefers the lowest one the arm can reach flat.
     foldL: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),
