@@ -1435,7 +1435,7 @@ function makeBodyMaterial(m) {
     uMarkReach: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
     uMarkRegion: { value: new THREE.Vector4() }, uMarkCol: { value: lin(MARK_COLOR) },
     // Stripes (the rod; see addStripe): rest-space heights and their strength.
-    uStripeY: { value: new Array(16).fill(0) }, uStripeA: { value: new Array(16).fill(0) }, uStripeN: { value: 0 },
+    uStripeY: { value: new Array(32).fill(0) }, uStripeA: { value: new Array(32).fill(0) }, uStripeX0: { value: new Array(32).fill(0) }, uStripeX1: { value: new Array(32).fill(0) }, uStripeN: { value: 0 },
     // Lip colour: the skin warmed toward a rose, less on male builds (or preset lipColor).
     uLipCol: { value: m.lipColor != null ? lin(m.lipColor) : skin.clone().lerp(lin(0xa84a52), m.build === 'male' ? 0.22 : 0.62) },
     // The painted lips' shape in rest space (spec.mouth, set in buildCharacter):
@@ -1503,7 +1503,7 @@ function makeBodyMaterial(m) {
           transformed -= objectNormal * dent * wC;
         }` + CONTACT_VERTEX);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform float uStripeY[16], uStripeA[16], uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform float uStripeY[32], uStripeA[32], uStripeX0[32], uStripeX1[32], uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
       .replace('#include <color_fragment>', `
         // Each layer's edge distance, thresholded over about a pixel; innermost first.
         vec4 wa = fwidth(vLayerA) * 0.75 + 1e-5, wb = fwidth(vLayerB) * 0.75 + 1e-5;
@@ -1512,7 +1512,7 @@ function makeBodyMaterial(m) {
         // Marks (see addMark): each side's colour spreads from its centre as it deepens,
         // reaching the edge of the region (glute and top of thigh, behind) at full
         // strength. Painted into the skin, so clothing layers cover it.
-        float mk = 0.0;
+        float mk = 0.0; vec3 outfitStripe = uMarkCol;
         // Lower edge: follows the crease where each thigh meets the glute (vCrease, metres
         // along the thigh, negative on the thigh), full to just past it and fading out
         // gradually by uMarkRegion.w down the thigh, so it has no hard line.
@@ -1531,19 +1531,25 @@ function makeBodyMaterial(m) {
           float side = smoothstep(-0.012, 0.004, s * vRest.x) * (1.0 - smoothstep(uMarkRegion.z, uMarkRegion.z + 0.03, s * vRest.x));
           mk = max(mk, f * spread * side * inBand * behind);
         }
-        // Stripes (the rod): a line across both cheeks at each recorded height, each adding its strength where it touched
-        // (no spreading), only behind and above the crease like the marks.
+        // Stripes (the rod): where the bar touched (see addStripe): its height, its length across the body, and not the cleft it
+        // bridges; behind the body. They add where they overlap, and the colour goes red to purple as it deepens.
+        vec3 stripeCol = uMarkCol;
         if (uStripeN > 0.0) {
           float sadd = 0.0;
-          float across = (1.0 - smoothstep(uMarkRegion.z, uMarkRegion.z + 0.03, abs(vRest.x)));
-          for (int si = 0; si < 16; si++) {
+          float rear = smoothstep(0.0, -0.025, vRest.z);
+          float cleft = smoothstep(0.006, 0.016, abs(vRest.x));
+          for (int si = 0; si < 32; si++) {
             if (float(si) >= uStripeN) break;
             float dy = abs(vRest.y - uStripeY[si]);
-            sadd += uStripeA[si] * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
+            float inx = smoothstep(uStripeX0[si] - 0.004, uStripeX0[si] + 0.006, vRest.x) * (1.0 - smoothstep(uStripeX1[si] - 0.006, uStripeX1[si] + 0.004, vRest.x));
+            sadd += uStripeA[si] * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
           }
-          mk = min(1.0, mk + sadd * across * inBand * behind);
+          sadd *= rear * cleft;
+          stripeCol = mix(uMarkCol, vec3(0.16, 0.03, 0.2), smoothstep(0.45, 0.95, sadd));
+          mk = max(mk, min(1.0, sadd * 1.0));
+          outfitStripe = stripeCol;
         }
-        vec3 outfitCol = mix(uSkin, uMarkCol, mk);
+        vec3 outfitCol = mix(uSkin, uStripeN > 0.0 && mk > 0.0 ? mix(uMarkCol, outfitStripe, step(0.0001, mk)) : uMarkCol, mk);
         // Lips: tinted where the lip shapes carry the surface, darker along the line
         // where upper meets lower.
         // Painted lips, per pixel from the rest position: an upper and a lower half-ellipse
@@ -2941,7 +2947,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // marks both sides, each at its own site.
   scn.mark = side => {
     const w = IMPLEMENTS[scn.implement].mark;
-    if (scn.tool && scn.tool.rod) { const F = scn.lastStrike; if (F && F.skin) addStripe(s, F.skin); return; }
+    if (scn.tool && scn.tool.rod) { const F = scn.lastStrike; if (F && F.skin) addStripe(s, F.skin, F.a, scn.tool.halfLen); return; }
     if (scn.tool && scn.tool.wide) { const F = scn.lastStrike; if (F && F.skinL) { addMark(s, 'L', F.skinL, w); addMark(s, 'R', F.skinR, w); } return; }
     const C = scn.fitCache[side]; if (C && C.fit && C.fit.skin) addMark(s, side, C.fit.skin, w);
   };
@@ -2953,7 +2959,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     if (!IMPLEMENTS[name] || (scn.atSpread && !IMPLEMENTS[name].dual)) name = scn.atSpread ? 'paddle' : 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
-    scn.rodT = Math.random() * 7;   // (the rod's height up the glutes, from the fold to the top; redrawn each lift)
+    scn.rodT = rodRoll();   // (the rod's height, 0 the lowest strike to 11 the highest; redrawn each lift)
     scn.buck = !!(scn.atCase && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
     if (scn.atCase && !scn.atHead && !scn.atKnees) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
@@ -3017,7 +3023,7 @@ function updateScene(scn, dt) {
   }
   if (timed) g.target = scn.giverQ(swing < 0.35 ? 'relaxed' : swing < 1.5 ? 'raised' : 'contact');
   // The rod lands somewhere new up the glutes each time: redrawn as the arm comes up past the top of the lift.
-  if (scn.tool && scn.tool.rod && scn.prevSwing > 1.2 && swing <= 1.2) scn.rodT = Math.random() * 7;
+  if (scn.tool && scn.tool.rod && scn.prevSwing > 1.2 && swing <= 1.2) scn.rodT = rodRoll();
   scn.prevSwing = swing;
   scn.swing = swing;
   // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
@@ -3760,8 +3766,13 @@ function flatGrip(H, a, b, rc, back, lean, seat) {
 // (22 mm), held in the fist like the paddle's handle. It uses the paddle's grip and fit (`buildPaddle(g, true)`).
 // How far the rod's line sinks into the higher site at contact (the press then flattens the skin round it).
 const ROD_DEPTH = 0.004;
-const ROD = { len: 0.345, width: 0.022, thick: 0.022, corner: 0.008, neck: 0, handle: 0.115, handleW: 0.022, butt: 0.012, lean: 0.25, seat: 0.02 };
+// How far (× the glute's height) the rod's strikes reach: from this far down from the top of the glute to this far down the thigh
+// below the fold. Strikes favour the upper half of that range (ROD_UPPER of them land there).
+const ROD_REACH = 0.25, ROD_UPPER = 0.7;
+const ROD = { len: 0.345, width: 0.014, thick: 0.014, corner: 0.006, neck: 0, handle: 0.115, handleW: 0.014, butt: 0.012, lean: 0.25, seat: 0.02 };
 function buildRod(g) { return buildPaddle(g, true); }
+// A strike height along the rod's strip (0 … 11): ROD_UPPER of rolls fall in the upper half, the rest in the lower.
+function rodRoll() { const up = Math.random() < ROD_UPPER; return (up ? 5.5 : 0) + Math.random() * 5.5; }
 function buildPaddle(g, rod = false) {
   const H = g.spec.H, hl = 0.106 * H, side = 'R', P = rod ? ROD : PADDLE;
   const along = g.bones['fingers' + side].position.clone().normalize();
@@ -3897,7 +3908,7 @@ function buildPaddle(g, rod = false) {
     probes.push([knuckle.clone().addScaledVector(along, ax + (bx - ax) * t).addScaledVector(palmN, ay + (by - ay) * t)
       .addScaledVector(across, offF * FINGER_PITCH * H), grip.fR]);
   }
-  return { grp, probes, faceProbes, wide: true, rod, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: rod ? 0.02 : P.width / 2,   // (a rod's footprint is a 4 cm strip, so the skin under it is found)
+  return { grp, probes, faceProbes, wide: true, rod, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: rod ? 0.012 : P.width / 2,   // (a rod's footprint is a narrow strip)
     palmC: along.clone().multiplyScalar(0.42 * hl), along, palmN, grip: { curl: grip.curl, bend: grip.bend },
     thumbQ, thumbFit: thumbFit && { near: thumbFit.near, al: thumbFit.al, be: thumbFit.be, ga: thumbFit.ga, ph: thumbFit.ph, pi: thumbFit.pi, on: thumbFit.on }, handleSpan: [xb, xs] };
 }
@@ -4013,7 +4024,7 @@ function bladeHandQuat(T, a, n) {
 function wideFit(scn, posed, shR, palm) {
   const g = scn.g, s = scn.s, T = scn.tool;
   const site = key => {
-    const strip = scn.anchors[key];
+    const strip = T.rod ? scn.anchors[key === 'foldL' ? 'rodL' : 'rodR'] : scn.anchors[key];
     if (T.rod) {
       // The rod lands anywhere up the glutes' height: `scn.rodT` runs from the fold (0) to the top of the strip (7).
       const k0 = Math.floor(clamp(scn.rodT, 0, strip.length - 1 - 1e-6)), f = clamp(scn.rodT, 0, strip.length - 1) - k0, a = posed(strip[k0]), b = posed(strip[Math.min(k0 + 1, strip.length - 1)]);
@@ -4276,6 +4287,16 @@ function sceneAnchors(s) {
     // glute; the strike search prefers the lowest one the arm can reach flat.
     foldL: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),
     foldR: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [-hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),
+    // The rod's strike strip, from a quarter of the glute's height down the thigh below the fold (index 0) to a quarter
+    // of the way down from its top (last): points on the skin, skinned by the pelvis above the fold and the thigh below it.
+    ...Object.fromEntries(['L', 'R'].map(side => {
+      const sgn = side === 'L' ? 1 : -1, top = Y.hip - 0.035 * H, G = top - foldY, lo = foldY - ROD_REACH * G, hi = top - ROD_REACH * G, N = 12;
+      return ['rod' + side, Array.from({ length: N }, (_, k) => {
+        const y = lerp(lo, hi, k / (N - 1)), below = clamp((foldY - y) / (ROD_REACH * G), 0, 1);
+        const x = sgn * lerp(hipA * 0.42, Math.abs(J['thigh' + side][0]), below);
+        return toSurface(y < foldY ? 'thigh' + side : 'pelvis', [x, y, 0]);
+      })];
+    })),
     kneeL: toSurface('thighL', kneeAt('L')),
     kneeR: toSurface('thighR', kneeAt('R')),
   };
@@ -4345,23 +4366,24 @@ function addMark(ch, side, pointW, weight = 1) {
   applyMarks(ch);
 }
 // ── Stripes (the rod) ──
-// Each contact leaves a stripe across both cheeks at the height it landed (rest space, through the pelvis, so it stays put
-// as the body moves): +STRIPE_ADD of full colour where it touched, the stripe as wide as the rod's contact. They don't grow
-// with the count or spread: two landing on the same line simply double (to a full colour). Up to STRIPES_MAX are kept.
-const STRIPE_ADD = 0.25, STRIPES_MAX = 16, STRIPE_HALF = 0.009;
-function addStripe(ch, pointW) {
+// Each contact leaves a stripe where the bar actually touched: at the height it landed (rest space, through the pelvis, so it
+// stays put as the body moves), across the length of the bar (not the cleft it bridges, nor beyond its ends). Each adds
+// STRIPE_ADD of full colour; where several overlap they add up, and the colour goes from red toward purple as it deepens.
+const STRIPE_ADD = 0.15, STRIPES_MAX = 32, STRIPE_HALF = 0.007;
+function addStripe(ch, pointW, axisW, halfLen) {
   const i = BONES.indexOf('pelvis');
-  const M = ch.bones.pelvis.matrixWorld.clone().multiply(ch.mesh.skeleton.boneInverses[i]).invert();
-  const y = pointW.clone().applyMatrix4(M).y;
+  const inv = ch.bones.pelvis.matrixWorld.clone().multiply(ch.mesh.skeleton.boneInverses[i]).invert();
+  const c = pointW.clone().applyMatrix4(inv);
+  const e1 = pointW.clone().addScaledVector(axisW, halfLen).applyMatrix4(inv), e2 = pointW.clone().addScaledVector(axisW, -halfLen).applyMatrix4(inv);
   ch.stripes = ch.stripes || [];
-  ch.stripes.push({ y, a: STRIPE_ADD, a0: STRIPE_ADD });
+  ch.stripes.push({ y: c.y, x0: Math.min(e1.x, e2.x), x1: Math.max(e1.x, e2.x), a: STRIPE_ADD, a0: STRIPE_ADD });
   if (ch.stripes.length > STRIPES_MAX) ch.stripes.shift();
   applyStripes(ch);
 }
 function applyStripes(ch) {
   const u = ch.mesh.material.userData.uniforms, S = ch.stripes || [];
   u.uStripeN.value = S.length;
-  S.forEach((s, k) => { u.uStripeY.value[k] = s.y; u.uStripeA.value[k] = s.a; });
+  S.forEach((s, k) => { u.uStripeY.value[k] = s.y; u.uStripeA.value[k] = s.a; u.uStripeX0.value[k] = s.x0; u.uStripeX1.value[k] = s.x1; });
 }
 // Call every frame for every character, on stage or not.
 function fadeMarks(ch, dt) {
