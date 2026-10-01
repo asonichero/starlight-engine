@@ -2575,7 +2575,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
     atCase: opts.position === 'case', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
   const atCase = scn.atCase;
-  if (atCase) { scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED;
+  if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
   const seat = atCase ? null : seatGiver(g);
   if (atCase) {
     // Standing at the subject's left, turned toward the subject's hips.
@@ -2637,7 +2638,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // The disciplinarian's pose for a beat, with the implement's own layer if it has one.
   const giverQCache = {};
   scn.giverQ = beat => {
-    const L = scn.implement && IMPLEMENTS[scn.implement].giver && IMPLEMENTS[scn.implement].giver[beat];
+    const layers = !scn.atCase && scn.implement && IMPLEMENTS[scn.implement].giver;
+    const L = layers && layers[beat];
     if (!L) return scn.giverBaseQ[beat];
     const k = scn.implement + beat;
     return giverQCache[k] || (giverQCache[k] = poseQuats(scn.giverBase, scn.giverBeat[beat], L));
@@ -2683,7 +2685,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // The implement in the disciplinarian's right hand ('hand' for none; see IMPLEMENTS).
   scn.implement = 'hand'; scn.tool = null;
   scn.setImplement = name => {
-    if (!IMPLEMENTS[name] || (scn.atCase && IMPLEMENTS[name].lapOnly)) name = 'hand';
+    if (!IMPLEMENTS[name]) name = 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
@@ -2908,7 +2910,7 @@ function updateScene(scn, dt) {
   // shoulder, and the palm centre (what the swing moves) where that puts the hand.
   let wideUp = null;
   if (wide) {
-    const R = WIDE_RAISED, T = scn.tool, ax = new THREE.Vector3(...R.axis).normalize(), fN = new THREE.Vector3(...R.faceN);
+    const R = scn.wideRaised, T = scn.tool, ax = new THREE.Vector3(...R.axis).normalize(), fN = new THREE.Vector3(...R.faceN);
     fN.addScaledVector(ax, -fN.dot(ax)).normalize();
     const Q = bladeHandQuat(T, ax, fN.negate());
     const face = shR.clone().addScaledVector(new THREE.Vector3(...R.face), g.spec.H / 1.7);
@@ -3108,7 +3110,7 @@ function updateScene(scn, dt) {
         : -seatExcess(seatPoints(scn), faceW, n, F.a, tool);
       const plan = onSkin ? strikeFit.face : wideRest.faceRest;
       const across = plan.clone().sub(faceW); across.addScaledVector(n, -across.dot(n));
-      const err = across.addScaledVector(n, (onSkin ? -WIDE_CONTACT.depth : REST_GAP) - low);
+      const err = across.addScaledVector(n, (onSkin ? -scn.wideContact.depth : REST_GAP) - low);
       const key = scn.implement + (onSkin ? 'B' : 'rest'), cur = scn.toolFix[key] || new THREE.Vector3();
       if (err.length() < 0.15) scn.toolFix[key] = cur.addScaledVector(err, 0.5).clampLength(0, 0.1);
     }
@@ -3146,7 +3148,7 @@ function updateScene(scn, dt) {
   if (tool && tool.thumbQ) { g.bones.thumbR.quaternion.copy(tool.thumbQ[0]); g.bones.thumb2R.quaternion.copy(tool.thumbQ[1]); }   // round the handle
   // A wide implement's fingers take WIDE_RAISED's pose toward the top of the swing.
   const up = wide ? clamp(1 - Math.abs(swing - 1), 0, 1) : 0;
-  if (up > 0) { g.bones.fingersR.quaternion.slerp(degQ(WIDE_RAISED.fingers), up); g.bones.fingersR.updateMatrixWorld(true); }
+  if (up > 0) { g.bones.fingersR.quaternion.slerp(degQ(scn.wideRaised.fingers), up); g.bones.fingersR.updateMatrixWorld(true); }
   // The fingers dent the skin they press, as the palm does: the resting left hand always,
   // the swinging hand once it's on the skin (not when it holds an implement: its fingers
   // are round the handle, and the implement presses the skin through the palm's press).
@@ -3179,8 +3181,8 @@ const IMPLEMENTS = {
   // `giver`: layers over the disciplinarian's beat poses while this implement is held. The
   // paddle's contact keeps the relaxed torso (the pose editor's pose was set on it) and
   // lifts the right shoulder a little; raised, the shoulder draws back.
-  // `lapOnly`: its rest and contact fits are built on the seat's geometry, so it isn't offered over the case.
-  paddle:    { mark: 8 / 3, lapOnly: true, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
+  // Over the case the disciplinarian's stance is the position's own, so the paddle adds nothing to it.
+  paddle:    { mark: 8 / 3, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
 };
 const REST_GAP = 0.001;   // an implement at rest: its lowest point this far off the skin
 const REST_SEGS = [['pelvis', 'spine1'], ['thighL', 'shinL'], ['thighR', 'shinR'], ['shinL', 'footL'], ['shinR', 'footR']];
@@ -3570,6 +3572,15 @@ const WIDE_YAW = 32;        // degrees the blade may turn off the sites' line, w
 // by height, it suits Kenji as it is.
 const WIDE_RAISED = { face: [-0.2491, 0.3825, 0.089], faceN: [0.651, -0.455, 0.607], axis: [0.185, 0.871, 0.454],
   elbow: [-0.3756, 0.247, -0.8932], fingers: [3, 0, 70] };
+// Over the case the sites face backward and up rather than up the body, so the blade's roll is
+// its own (from the viewer's pose editor); the raised blade is turned with the disciplinarian.
+const CASE_WIDE_CONTACT = { roll: 66, yaw: 0, slide: 0, drop: 0.01, depth: 0.02, elbow: [-0.7, -0.45, -0.55] };
+function caseWideRaised() {
+  const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
+  const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
+  const R = WIDE_RAISED;
+  return { ...R, face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
+}
 const WIDE_CONTACT = { roll: 58.2, yaw: 2.7, slide: 0.0083, drop: 0.0158, depth: 0.02, elbow: [-0.0771, -0.4957, -0.865] };
 // How far the upper arm can go behind the plane of the chest, degrees. Measured from that
 // plane rather than from hanging down, since the elbow can go back a long way once it's
@@ -3675,7 +3686,7 @@ function wideFit(scn, posed, shR, palm) {
   // Contact: the blade against the sit spots (WIDE_CONTACT), its face WIDE_CONTACT.depth
   // into the higher of the two sites. The glutes above them stand well through its plane;
   // the press flattens them onto the face (see updateScene).
-  const W_ = WIDE_CONTACT, cn = nAt(W_.roll), cb = cn.clone().cross(line);
+  const W_ = scn.wideContact, cn = nAt(W_.roll), cb = cn.clone().cross(line);
   const cc = mid.clone().addScaledVector(line, W_.slide * g.spec.H / 1.7).addScaledVector(cb, -W_.drop * g.spec.H / 1.7);
   const hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
   const contactCands = [];
