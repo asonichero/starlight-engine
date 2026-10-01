@@ -2365,9 +2365,9 @@ HEAD_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(HEAD_SUBJ_REACT_Q.L).map(b 
 // subject while relaxed (from a pose-editor report: pelvis at x −29.5 cm, facing the subject, the back
 // straight), and turn toward the subject's hips as the arm comes up. Hanging hands (m, × height, from
 // the shoulder in the disciplinarian's frame): down, outward and forward.
-const HEAD_GIVER_AT = [-0.295, -0.435];
+const HEAD_GIVER_AT = [-0.266, -0.386];
 const HEAD_YAW_RELAXED = -2, HEAD_YAW_STRIKE = 30;
-const HEAD_HANG = { down: 0.306, out: 0.039, fwd: 0.029 };
+const HEAD_HANG = { down: 0.312, out: 0.048, fwd: 0.007 };
 const HEAD_GIVER_BEAT = {
   relaxed: { spine1: [3.8, -1.1, -3.9], spine2: [1.3, 1.6, 4], neck: [0, 0, 0] },
   raised:  CASE_GIVER_BEAT.raised,
