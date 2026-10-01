@@ -2352,6 +2352,24 @@ const CASE_BUCK_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_BUCK), R: poseQuats(C
 CASE_BUCK_Q.B = Object.fromEntries(Object.keys(CASE_BUCK_Q.L).map(b => [b, CASE_BUCK_Q.L[b].clone().slerp(CASE_BUCK_Q.R[b], 0.5)]));
 const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
 
+// ── Hands on knees ─────────────────────────────────────────────
+// The subject stands free, bent forward at the hips (KNEES_PITCH from upright) with the knees bent, palms on
+// the front of the knees and the back flat. The disciplinarian stands and behaves as over the case (same
+// stance, side and reach); only the subject's pose and hands differ, and there is no case.
+const KNEES_PITCH = 60;
+const KNEES_SUBJECT_BASE = {
+  // World angles forward from upright: thighs +40°, shins −25° (the knees flexed 65°), the soles flat.
+  // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
+  thighL: [-(40 + KNEES_PITCH), 0, -4], thighR: [-(40 + KNEES_PITCH), 0, 4], shinL: [65, 0, 0], shinR: [65, 0, 0], footL: [-25, 0, 0], footR: [-25, 0, 0],
+  spine1: [-6, 0, 0], spine2: [-8, 0, 0], neck: [-30, 0, 0], head: [-12, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+  fingersL: [0, 0, -35], fingersR: [0, 0, 35],
+};
+const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-44, 0, 0], head: [-16, 0, 0] };
+const KNEES_BASE_Q = poseQuats(KNEES_SUBJECT_BASE);
+const KNEES_REACT_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_SUBJECT_REACT), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_SUBJECT_REACT)) };
+KNEES_REACT_Q.B = Object.fromEntries(Object.keys(KNEES_REACT_Q.L).map(b => [b, KNEES_REACT_Q.L[b].clone().slerp(KNEES_REACT_Q.R[b], 0.5)]));
+
 // ── Hands on head ──────────────────────────────────────────────
 // The subject stands free, upright, facing +X, hands on the back of the head with the elbows out.
 // The disciplinarian stands as over the case (same stance, same side), the right hand striking the
@@ -2651,10 +2669,11 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
     fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
-    atCase: opts.position === 'case' || opts.position === 'head', atHead: opts.position === 'head', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
-  const atCase = scn.atCase, atHead = scn.atHead;
+    atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees', atHead: opts.position === 'head', atKnees: opts.position === 'knees', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
+  const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  if (atKnees) { scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; }
   if (atHead) {
     scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.buckQ = HEAD_BUCK_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
     scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
@@ -2704,15 +2723,17 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     // subject's left, world −Z, as in the lap).
     for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), CASE_PITCH * Math.PI / 180));
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (atKnees ? KNEES_PITCH : CASE_PITCH) * Math.PI / 180));
     standAt(s, q, new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
     scn.subjBasePos = s.group.position.clone();
+    if (!atKnees) {
     // The lid is set from the subject's own height, and runs from just short of the palms
     // to well past them.
     scn.caseTop = opts.caseHeight || s.spec.Y.hipJoint * 0.88;
     const pL = casePalm(s, 'L', scn.caseTop), pR = casePalm(s, 'R', scn.caseTop);
     scn.bench = buildCase(scn.caseTop, Math.min(pL.x, pR.x) - 0.3, Math.max(pL.x, pR.x) + 0.4);
     parent.add(scn.bench);
+    }
   } else {
   const tilt = 0.28, c = Math.cos(tilt), sn = Math.sin(tilt);
   const R = new THREE.Matrix4().makeBasis(
@@ -2782,7 +2803,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     if (!IMPLEMENTS[name]) name = 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
-    scn.buck = !!(scn.atCase && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
+    scn.buck = !!(scn.atCase && !scn.atKnees && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
     if (scn.atCase && !scn.atHead) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
     scn.toolFix = {}; scn.fitCache.B = null; scn.handQ = null;
@@ -3055,7 +3076,19 @@ function updateScene(scn, dt) {
   // reach; otherwise the arm straightens toward the floor and the fingertips touch.
   const floorN = new THREE.Vector3(0, 1, 0);
   const sHand = s.spec.H * 0.106;
-  for (const side of scn.atHead ? [] : ['L', 'R']) {
+  // Hands on knees: palms on the front of the knees, fingers down, elbows out.
+  if (scn.atKnees) {
+    for (const side of ['L', 'R']) {
+      const knee = s.bones['shin' + side].getWorldPosition(new THREE.Vector3());
+      const rK = s.spec.m.knee / 100 / (2 * Math.PI);
+      const n = new THREE.Vector3(1, 0.1, 0).normalize();
+      const target = knee.clone().addScaledVector(n, rK + 0.0085 * sH + 0.004).add(new THREE.Vector3(0, 0.02 * sH / 1.58, 0));
+      const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+      const out = side === 'L' ? -1 : 1;
+      armIK(s, side, target, sh.clone().add(new THREE.Vector3(-0.1, 0.05, out * 0.5)), n, new THREE.Vector3(0, -1, 0));
+    }
+  }
+  for (const side of scn.atHead || scn.atKnees ? [] : ['L', 'R']) {
     const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
     const out = side === 'L' ? -1 : 1;   // subject's left is world −Z in this orientation
     const pole = sh.clone().add(new THREE.Vector3(-0.4, 0.1, out * 0.25));
@@ -5290,7 +5323,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createDisciplineScene, POSITIONS: ['lap', 'case', 'head'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
