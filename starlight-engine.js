@@ -2366,7 +2366,13 @@ const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
 // the paddle the hip bend reduces by KNEES_UP degrees and the subject comes up, the pelvis and feet staying put.
 const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
 const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
-const KNEES_UP = 7;
+const KNEES_UP = 12;
+// Paddle on contact (from the 12:52 report): the back hollows a little more and the blade rolls up to 95° (the
+// case's 82.5° otherwise). The hair brush's contact leans the disciplinarian's upper back further forward (17.6°).
+const KNEES_PADDLE_BACK = { spine1: [-8.4, 0, -1.6], spine2: [-18.6, 0, -1.3] };
+const KNEES_ROLL = 95;
+const KNEES_GIVER_BEAT = { ...CASE_GIVER_BEAT, contact: { ...CASE_GIVER_BEAT.contact, spine2: [17.6, -4, 0] } };
+const KNEES_GIVER_Q = poseTable(CASE_GIVER_BASE, KNEES_GIVER_BEAT);
 const KNEES_SUBJECT_BASE = {
   // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
   thighL: [KNEES_LEG_BACK - KNEES_PITCH, 0, -4], thighR: [KNEES_LEG_BACK - KNEES_PITCH, 0, 4], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [-KNEES_LEG_BACK, 0, 0], footR: [-KNEES_LEG_BACK, 0, 0],
@@ -2716,7 +2722,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
-  if (atKnees) { scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_REACT_Q; }   // (the paddle's buckle is the body's, in kneesBody)
+  if (atKnees) { scn.giverBaseQ = KNEES_GIVER_Q; scn.giverBeat = KNEES_GIVER_BEAT; scn.wideContact = { ...CASE_WIDE_CONTACT, roll: KNEES_ROLL }; scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_REACT_Q; }   // (the paddle's buckle is the body's, in kneesBody)
   if (atHead) {
     scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.buckQ = HEAD_BUCK_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
     scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
