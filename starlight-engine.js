@@ -2402,7 +2402,9 @@ const KNEES_PADDLE_BACK = { spine1: [-8.4, 0, -1.6], spine2: [-18.6, 0, -1.3] };
 const KNEES_ROLL = 95;
 const KNEES_GIVER_BEAT = { ...CASE_GIVER_BEAT, contact: { ...CASE_GIVER_BEAT.contact, spine2: [17.6, -4, 0] } };
 const KNEES_GIVER_Q = poseTable(CASE_GIVER_BASE, KNEES_GIVER_BEAT);
-const SPREAD_GIVER_BEAT = Object.fromEntries(['relaxed', 'raised', 'contact'].map(b => [b, { ...KNEES_GIVER_BEAT[b], ...SPREAD_GIVER_STANCE }]));
+// Contact leans the upper body further forward over the subject (14:16 report).
+const SPREAD_CONTACT_BACK = { spine1: [28.9, -9.3, -11.4] };
+const SPREAD_GIVER_BEAT = Object.fromEntries(['relaxed', 'raised', 'contact'].map(b => [b, { ...KNEES_GIVER_BEAT[b], ...SPREAD_GIVER_STANCE, ...(b === 'contact' ? SPREAD_CONTACT_BACK : {}) }]));
 const SPREAD_GIVER_Q = poseTable(CASE_GIVER_BASE, SPREAD_GIVER_BEAT);
 const KNEES_SUBJECT_BASE = {
   // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
