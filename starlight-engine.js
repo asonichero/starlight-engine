@@ -2582,8 +2582,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
     atCase: opts.position === 'case', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
   const atCase = scn.atCase;
-  scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED;
-  if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
+  if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
   const seat = atCase ? null : seatGiver(g);
   if (atCase) {
     // Standing at the subject's left, turned toward the subject's hips.
@@ -2994,7 +2994,7 @@ function updateScene(scn, dt) {
   // A wide implement rests across both sites, flat on the seat (its fit's `rest`), lifted
   // off the skin to REST_GAP (no compression), plus its own correction learnt at rest.
   const wideRest = wide ? strikeFit.rest : null;
-  if (wide) restAt = wideRest.palmC.clone().addScaledVector(wideRest.n, WIDE_DEPTH + REST_GAP)
+  if (wide) restAt = wideRest.palmC.clone().addScaledVector(wideRest.n, scn.wideRest ? 0 : WIDE_DEPTH + REST_GAP)
     .add(scn.toolFix[scn.implement + 'rest'] || new THREE.Vector3());
   else if (tool) {
     const thumbR = fingersFwd.clone().cross(thighN.clone().negate()).normalize();
@@ -3593,6 +3593,16 @@ const WIDE_RAISED = { face: [-0.2491, 0.3825, 0.089], faceN: [0.651, -0.455, 0.6
 // Over the case the sites face backward and up rather than up the body, so the blade's roll is
 // its own (from the viewer's pose editor); the raised blade is turned with the disciplinarian.
 const CASE_WIDE_CONTACT = { roll: 82.5, yaw: 0, slide: 0, drop: 0.01, depth: 0.02, elbow: [-0.7, -0.45, -0.55] };
+// The blade at rest over the case, from the viewer's pose editor (Kenji with Aya): held low at the
+// right side, its face turned toward the subject. Face centre from the right shoulder (m, for 1.7 m
+// tall), the face's normal and long axis, all in the frame before the disciplinarian's yaw.
+const CASE_WIDE_REST = { face: [0.001, -0.661, 0.201], faceN: [0.967, -0.191, -0.167], axis: [0.135, -0.171, 0.976], elbow: [-0.077, -0.997, -0.037] };
+function caseWideRest() {
+  const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
+  const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
+  const R = CASE_WIDE_REST;
+  return { face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
+}
 function caseWideRaised() {
   const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
   const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
@@ -3680,27 +3690,40 @@ function wideFit(scn, posed, shR, palm) {
   const restCands = [];
   // Roll: n turns about the level line from straight up; coarse, then fine.
   const nAt = th => up.clone().applyAxisAngle(line, th * DEG);
-  let roll = { e: Infinity };
-  for (let th = -78; th <= 78; th += 6) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
-  for (let th = roll.th - 5; th <= roll.th + 5; th += 1) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
-  const n = roll.n;
-  for (let yaw = -WIDE_YAW; yaw <= WIDE_YAW; yaw += 4) {
-    const a = line.clone().applyAxisAngle(n, yaw * DEG);
-    const b = n.clone().cross(a), Q = handQuat(a, n);
-    for (let slide = -WIDE_SLIDE; slide <= WIDE_SLIDE + 1e-6; slide += 0.01) {
-      const c = mid.clone().addScaledVector(a, slide);
-      // Both sites well inside the blade: 3 cm from its ends, 2.5 cm from its sides.
-      const inside = sp => { const d = sp.skin.clone().sub(c); return Math.abs(d.dot(a)) <= T.halfLen - 0.03 && Math.abs(d.dot(b)) <= T.halfW - 0.025; };
-      if (!inside(sL) || !inside(sR)) continue;
-      const e = seatExcess(seat, c, n, a, T);
-      // How far each site is below the face's plane (0 = touching).
-      const gap = Math.max(e - sL.skin.clone().sub(c).dot(n), e - sR.skin.clone().sub(c).dot(n));
-      const face = c.clone().addScaledVector(n, e - WIDE_DEPTH);
-      armCands(restCands, { yaw, slide, a, n, e, gap, Q, face, roll: roll.th, pose: 4 * gap + 0.0004 * Math.abs(yaw) + 0.1 * Math.abs(slide) });
+  let rest;
+  if (scn.wideRest) {
+    // Fixed rest pose (set per position): the blade held at the side, placed from the shoulder.
+    const R = scn.wideRest, fN = new THREE.Vector3(...R.faceN).normalize(), ax = new THREE.Vector3(...R.axis);
+    ax.addScaledVector(fN, -ax.dot(fN)).normalize();
+    const nR = fN.clone().negate(), faceR = shR.clone().addScaledVector(new THREE.Vector3(...R.face), g.spec.H / 1.7);
+    armCands(restCands, { yaw: 0, slide: 0, a: ax, n: nR, e: 0, gap: 0, Q: handQuat(ax, nR), face: faceR, roll: 0, pose: 0 }, 4, true);
+    // The elbow goes to the candidate nearest the set direction (the upper arm hanging by the side).
+    const Er = shR.clone().addScaledVector(new THREE.Vector3(...R.elbow).normalize(), L1);
+    rest = restCands.reduce((m, c) => !m || c.E.distanceTo(Er) < m.E.distanceTo(Er) ? c : m, null);
+    Object.assign(rest, { palmC: rest.P, faceRest: faceR.clone() });
+  } else {
+    let roll = { e: Infinity };
+    for (let th = -78; th <= 78; th += 6) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
+    for (let th = roll.th - 5; th <= roll.th + 5; th += 1) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
+    const n = roll.n;
+    for (let yaw = -WIDE_YAW; yaw <= WIDE_YAW; yaw += 4) {
+      const a = line.clone().applyAxisAngle(n, yaw * DEG);
+      const b = n.clone().cross(a), Q = handQuat(a, n);
+      for (let slide = -WIDE_SLIDE; slide <= WIDE_SLIDE + 1e-6; slide += 0.01) {
+        const c = mid.clone().addScaledVector(a, slide);
+        // Both sites well inside the blade: 3 cm from its ends, 2.5 cm from its sides.
+        const inside = sp => { const d = sp.skin.clone().sub(c); return Math.abs(d.dot(a)) <= T.halfLen - 0.03 && Math.abs(d.dot(b)) <= T.halfW - 0.025; };
+        if (!inside(sL) || !inside(sR)) continue;
+        const e = seatExcess(seat, c, n, a, T);
+        // How far each site is below the face's plane (0 = touching).
+        const gap = Math.max(e - sL.skin.clone().sub(c).dot(n), e - sR.skin.clone().sub(c).dot(n));
+        const face = c.clone().addScaledVector(n, e - WIDE_DEPTH);
+        armCands(restCands, { yaw, slide, a, n, e, gap, Q, face, roll: roll.th, pose: 4 * gap + 0.0004 * Math.abs(yaw) + 0.1 * Math.abs(slide) });
+      }
     }
-  }
-  const rest = pick(restCands);
+  rest = pick(restCands);
   Object.assign(rest, { palmC: rest.P, faceRest: rest.face.clone().addScaledVector(rest.n, WIDE_DEPTH + REST_GAP) });
+  }
   // Contact: the blade against the sit spots (WIDE_CONTACT), its face WIDE_CONTACT.depth
   // into the higher of the two sites. The glutes above them stand well through its plane;
   // the press flattens them onto the face (see updateScene).
