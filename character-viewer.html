@@ -731,6 +731,9 @@ document.getElementById('sc-on').onclick = () => {
 // A browser holding an older cached starlight-engine.js would silently ignore the position.
 const POSITIONS_OK = !!S.POSITIONS;
 function refreshPositions() {
+  // Spread feet: dual-strike implements only (see IMPLEMENTS.dual).
+  if (sc.position === 'spread' && !S.IMPLEMENTS[sc.implement].dual) { sc.implement = Object.keys(S.IMPLEMENTS).find(n => S.IMPLEMENTS[n].dual) || 'hand'; if (scn) scn.setImplement(sc.implement); }
+  document.querySelectorAll('#sc-implements button').forEach(b => { b.disabled = sc.position === 'spread' && !S.IMPLEMENTS[b.dataset.impl].dual; });
   document.querySelectorAll('#sc-position button').forEach(b => { b.classList.toggle('on', b.dataset.pos === sc.position); if (!POSITIONS_OK && b.dataset.pos !== 'lap') { b.disabled = true; b.title = 'starlight-engine.js is out of date: reload without the cache (Ctrl+Shift+R)'; } });
   if (typeof refreshImplements === 'function') refreshImplements();
 }
