@@ -345,6 +345,10 @@ const FINGER_ROOT = 0.56;       // knuckle line, × hand length from the wrist
 // palm side × height, toward the thumb side × height, radius × height].
 const THUMB = [[0.1, 0, 0.012, 0.0064], [0.36, 0.003, 0.027, 0.0054], [0.68, 0.006, 0.031, 0.0044]];
 
+// The pelvis carries the crotch skin above this band (heights above the crotch point, × body height), handing over to
+// the thighs below it. Raised from -0.004/0.02: bent over with the legs straight, the thigh-carried skin at the crotch
+// stood out as a flat flap between the glutes.
+const CROTCH_LO = 0.05, CROTCH_HI = 0.09;
 function buildSpec(m) {
   const H = m.height / 100, L = m.legs, cm = v => v / 100;
   const R = C => cm(C) / (2 * Math.PI);          // radius from circumference
@@ -1351,7 +1355,7 @@ function buildMesh(spec, h) {
     // stay entirely with their legs.
     if (p[1] < spec.J.thighL[1]) {
       const hx = spec.J.thighL[0], cy = crotchY(spec);
-      const give = (1 - smooth01(0.2 * hx, 0.6 * hx, Math.abs(p[0]))) * smooth01(cy - 0.004 * spec.H, cy + 0.02 * spec.H, p[1]);
+      const give = (1 - smooth01(0.2 * hx, 0.6 * hx, Math.abs(p[0]))) * smooth01(cy + CROTCH_LO * spec.H, cy + CROTCH_HI * spec.H, p[1]);
       for (const t of ['thighL', 'thighR']) if (acc[t] && give > 0) { acc.pelvis = (acc.pelvis || 0) + acc[t] * give; acc[t] *= 1 - give; }
     }
     cand.sort((a, b) => b[1] - a[1]);
