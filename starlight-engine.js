@@ -3764,7 +3764,7 @@ function bladeHandQuat(T, a, n) {
 }
 function wideFit(scn, posed, shR, palm) {
   const g = scn.g, s = scn.s, T = scn.tool;
-  const site = key => { const ps = posed(scn.anchors[key][STRIKE_K]); return { skin: ps.p.clone().addScaledVector(ps.n, -palm), n: ps.n.clone() }; };
+  const site = key => { const ps = posed(scn.anchors[key][scn.atHead ? HEAD_STRIKE_K : STRIKE_K]); return { skin: ps.p.clone().addScaledVector(ps.n, -palm), n: ps.n.clone() }; };
   const sL = site('foldL'), sR = site('foldR');
   const C = scn.fitCache.B;
   if (C && C.sh.distanceTo(shR) < 0.01 && C.L.distanceTo(sL.skin) < 0.01 && C.R.distanceTo(sR.skin) < 0.01) return C.fit;
