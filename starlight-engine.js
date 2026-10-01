@@ -2282,6 +2282,77 @@ const SUBJ_REACT_Q = { L: poseQuats(SUBJECT_BASE, SUBJECT_REACT), R: poseQuats(S
 SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(SUBJ_REACT_Q.L).map(b => [b, SUBJ_REACT_Q.L[b].clone().slerp(SUBJ_REACT_Q.R[b], 0.5)]));
 const GIVER_Q = Object.fromEntries(Object.keys(GIVER_BEAT).map(k => [k, poseQuats(GIVER_BASE, GIVER_BEAT[k])]));
 
+// ── Over the case ──────────────────────────────────────────────
+// The subject stands facing +X, bent at the hips (the whole body pitched forward about the
+// hip joint, the legs kept upright by counter-rotating the thighs), arms straight down to
+// palms flat on the case lid ahead of them. The disciplinarian stands at the subject's
+// left side (world −Z) facing +Z, turned a little toward the subject's hips, so the
+// swinging (right) arm points at the subject's rear exactly as it does from the seat.
+// Everything else about the scene (strike fit, press, marks) is shared with the lap.
+const CASE_PITCH = 84;   // degrees the torso is pitched forward from upright
+const CASE_SUBJECT_BASE = {
+  thighL: [-CASE_PITCH, 0, -4], thighR: [-CASE_PITCH, 0, 4], shinL: [6, 0, 0], shinR: [6, 0, 0], footL: [-6, 0, 0], footR: [-6, 0, 0],
+  spine1: [-3, 0, 0], spine2: [-4, 0, 0], neck: [-40, 0, 0], head: [-14, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+};
+// Struck: the hips jump forward and the back hollows, the head comes up, the knees give.
+const CASE_SUBJECT_REACT = {
+  thighL: [-CASE_PITCH - 6, 0, -4], thighR: [-CASE_PITCH - 10, 0, 4], shinL: [16, 0, 0], shinR: [26, 0, 0], footL: [-16, 0, 0], footR: [-26, 0, 0],
+  spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-48, 0, 0], head: [-16, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+};
+const CASE_GIVER_BASE = { thighL: [-24, 0, -9], thighR: [-24, 0, 9], shinL: [34, 0, 0], shinR: [34, 0, 0], footL: [-10, 0, 0], footR: [-10, 0, 0] };
+const CASE_GIVER_BEAT = {
+  relaxed: { spine1: [16, 0, 0], spine2: [8, 0, 0], neck: [0, 0, 0] },
+  raised:  { spine1: [12, 0, 0], spine2: [4, 8, 0], neck: [4, 0, 0] },
+  contact: { spine1: [20, 0, 0], spine2: [10, -4, 0], neck: [6, 0, 0] },
+};
+const CASE_YAW = -35;      // the disciplinarian's turn toward the subject's hips, degrees
+const CASE_GIVER_AT = [0, -0.44];   // where the disciplinarian's pelvis stands (x, z)
+const poseTable = (base, beats) => Object.fromEntries(Object.keys(beats).map(k => [k, poseQuats(base, beats[k])]));
+const CASE_SUBJ_BASE_Q = poseQuats(CASE_SUBJECT_BASE);
+const CASE_SUBJ_REACT_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_SUBJECT_REACT), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_SUBJECT_REACT)) };
+CASE_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(CASE_SUBJ_REACT_Q.L).map(b => [b, CASE_SUBJ_REACT_Q.L[b].clone().slerp(CASE_SUBJ_REACT_Q.R[b], 0.5)]));
+const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
+
+// Puts `ch` (already posed) so that its pelvis joint is at `at` with the group turned to
+// `quat`, then drops it until its feet rest on the floor.
+function standAt(ch, quat, at) {
+  ch.group.quaternion.copy(quat);
+  const pel = new THREE.Vector3(...ch.spec.J.pelvis).applyQuaternion(quat);
+  ch.group.position.copy(at).sub(pel);
+  ch.group.updateMatrixWorld(true);
+  const lift = (ch.bones.footL.getWorldPosition(new THREE.Vector3()).y + ch.bones.footR.getWorldPosition(new THREE.Vector3()).y) / 2 - ch.spec.J.footL[1];
+  ch.group.position.y -= lift;
+  ch.group.updateMatrixWorld(true);
+}
+// Where a subject's palm goes on the lid (height `top`): ahead of the shoulder far enough
+// that the arm is a little short of straight, level with the shoulder across the body.
+function casePalm(s, side, top) {
+  const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+  const wristReach = s.bones['forearm' + side].position.length() + s.bones['hand' + side].position.length();
+  const dy = sh.y - top, r = wristReach * 0.94;
+  const dx = Math.sqrt(Math.max(0, r * r - dy * dy));
+  const sHand = s.spec.H * 0.106;
+  return new THREE.Vector3(sh.x + dx + sHand * 0.42, top + 0.012 * s.spec.H, sh.z);
+}
+// The case itself: a road case with its near edge `x0` and far edge `x1` along X, `top` high.
+function buildCase(top, x0, x1) {
+  const g = new THREE.Group();
+  const caseMat = new THREE.MeshStandardMaterial({ color: lin(0x1a1a1c), roughness: 0.75, metalness: 0.15 });
+  const metal = new THREE.MeshStandardMaterial({ color: lin(0x8a8a90), roughness: 0.35, metalness: 0.8 });
+  const L = x1 - x0, W = 0.9;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(L, top, W), caseMat);
+  body.position.set((x0 + x1) / 2, top / 2, 0); body.castShadow = body.receiveShadow = true; g.add(body);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(L + 0.02, 0.025, W + 0.02), metal);
+  trim.position.set((x0 + x1) / 2, top - 0.012, 0); g.add(trim);
+  for (const x of [x0 + 0.02, x1 - 0.02]) for (const z of [-W / 2 + 0.02, W / 2 - 0.02]) for (const y of [0.03, top - 0.04]) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), metal);
+    c.position.set(x, y, z); g.add(c);
+  }
+  return g;
+}
+
 function buildBench(top) {
   const g = new THREE.Group();
   const caseMat = new THREE.MeshStandardMaterial({ color: lin(0x1a1a1c), roughness: 0.75, metalness: 0.15 });
@@ -2480,11 +2551,23 @@ const LAP_ALONG = 0.7, LAP_SETTLE = 0.9;
 function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
-    fitCache: {}, onImpact: null, dv: null, pendingFlip: false };
-  const seat = seatGiver(g);
-  g.target = GIVER_Q[scn.beat];
-  scn.bench = seat.bench;
-  parent.add(scn.bench);
+    fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
+    atCase: opts.position === 'case', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
+  const atCase = scn.atCase;
+  if (atCase) { scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  const seat = atCase ? null : seatGiver(g);
+  if (atCase) {
+    // Standing at the subject's left, turned toward the subject's hips.
+    resetCharacter(g);
+    g.target = CASE_GIVER_Q[scn.beat];
+    g.pose = {}; for (const b of BONES) { g.pose[b] = g.target[b].clone(); g.bones[b].quaternion.copy(g.pose[b]); }
+    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), CASE_YAW * Math.PI / 180),
+      new THREE.Vector3(CASE_GIVER_AT[0], g.spec.J.pelvis[1], CASE_GIVER_AT[1]));
+  } else {
+    g.target = GIVER_Q[scn.beat];
+    scn.bench = seat.bench;
+    parent.add(scn.bench);
+  }
 
   // A skirt comes off for the correction (see setSkirtOff): pressed between two bodies
   // whose skin the contact shader compresses on the GPU, the cloth can't be kept out of
@@ -2499,8 +2582,22 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // height is the thigh's own top there (it thins toward the knee), less a little
   // for the weight settling in; the contact shader takes up the rest.
   resetCharacter(s);
-  s.target = SUBJ_BASE_Q;
+  s.target = scn.baseQ;
   s.pose = {}; for (const b of BONES) s.pose[b] = s.target[b].clone();
+  if (atCase) {
+    // Bent over the case: pitched forward about the hips, facing +X (local +X is the
+    // subject's left, world −Z, as in the lap).
+    for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), CASE_PITCH * Math.PI / 180));
+    standAt(s, q, new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
+    // The lid is set from the subject's own height, and runs from just short of the palms
+    // to well past them.
+    scn.caseTop = opts.caseHeight || s.spec.Y.hipJoint * 0.88;
+    const pL = casePalm(s, 'L', scn.caseTop), pR = casePalm(s, 'R', scn.caseTop);
+    scn.bench = buildCase(scn.caseTop, Math.min(pL.x, pR.x) - 0.3, Math.max(pL.x, pR.x) + 0.4);
+    parent.add(scn.bench);
+  } else {
   const tilt = 0.28, c = Math.cos(tilt), sn = Math.sin(tilt);
   const R = new THREE.Matrix4().makeBasis(
     new THREE.Vector3(0, 0, -1), new THREE.Vector3(c, -sn, 0), new THREE.Vector3(-sn, -c, 0));
@@ -2513,15 +2610,16 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   s.group.position.copy(pelvisAt).sub(pelvisLocal);
   for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
   s.group.updateMatrixWorld(true);
+  }
   scn.anchors = sceneAnchors(s);
 
   // The disciplinarian's pose for a beat, with the implement's own layer if it has one.
   const giverQCache = {};
   scn.giverQ = beat => {
     const L = scn.implement && IMPLEMENTS[scn.implement].giver && IMPLEMENTS[scn.implement].giver[beat];
-    if (!L) return GIVER_Q[beat];
+    if (!L) return scn.giverBaseQ[beat];
     const k = scn.implement + beat;
-    return giverQCache[k] || (giverQCache[k] = poseQuats(GIVER_BASE, GIVER_BEAT[beat], L));
+    return giverQCache[k] || (giverQCache[k] = poseQuats(scn.giverBase, scn.giverBeat[beat], L));
   };
   scn.setBeat = beat => { scn.mode = 'beat'; scn.beat = beat; g.target = scn.giverQ(beat); };
   scn.setLoop = on => { scn.mode = on ? 'loop' : 'beat'; scn.loopT = 0; if (!on) scn.setBeat(scn.beat); };
@@ -2564,7 +2662,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // The implement in the disciplinarian's right hand ('hand' for none; see IMPLEMENTS).
   scn.implement = 'hand'; scn.tool = null;
   scn.setImplement = name => {
-    if (!IMPLEMENTS[name]) name = 'hand';
+    if (!IMPLEMENTS[name] || (scn.atCase && IMPLEMENTS[name].lapOnly)) name = 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
@@ -2632,7 +2730,7 @@ function updateScene(scn, dt) {
   // Joint-angle poses (subject blends toward the reaction pose).
   const a = 1 - Math.exp(-dt * 9);
   for (const b of BONES) {
-    _q.copy(SUBJ_BASE_Q[b]).slerp(SUBJ_REACT_Q[timed ? scn.reactSide : scn.reactKey()][b], scn.reaction);
+    _q.copy(scn.baseQ[b]).slerp(scn.reactQ[timed ? scn.reactSide : scn.reactKey()][b], scn.reaction);
     s.pose[b].slerp(_q, timed ? 1 : a);
     s.bones[b].quaternion.copy(s.pose[b]);
     g.pose[b].slerp(g.target[b], timed ? 1 - Math.exp(-dt * 14) : a);
@@ -2653,9 +2751,9 @@ function updateScene(scn, dt) {
     const n = A.n.clone().transformDirection(M);
     return { p: p.addScaledVector(n, palm), n };
   };
-  const shoulders = posed('shoulders'), glute = posed('glute');
+  const shoulders = posed(scn.atCase ? 'lowback' : 'shoulders'), glute = posed('glute');
   // The resting hand takes the thigh nearer the disciplinarian (subject's left, toward −Z).
-  const knee = posed('kneeL');
+  const knee = posed(scn.atCase ? 'glute' : 'kneeL');   // over the case the hand rests on the hip instead
   // Left hand: same no-clip rule as the strike — palm set slightly below the skin,
   // and the skin under it compressed onto the palm plane.
   const REST_DEPTH = 0.008;
@@ -2808,7 +2906,7 @@ function updateScene(scn, dt) {
     const palmReach = armReach(s, side);
     // Hands stay planted while the body reacts: the palm spot is taken at rest and
     // held until the reaction has settled, rather than following the shoulders.
-    let palmPt = new THREE.Vector3(sh.x + 0.07 * sH, 0.012 * sH, sh.z + out * 0.06 * sH);
+    let palmPt = scn.atCase ? casePalm(s, side, scn.caseTop) : new THREE.Vector3(sh.x + 0.07 * sH, 0.012 * sH, sh.z + out * 0.06 * sH);
     if (!scn.plant[side] || scn.reaction < 0.02) scn.plant[side] = palmPt.clone();
     else palmPt = scn.plant[side].clone();
     // The flat-palm IK solves for the wrist (palm centre minus half a hand along the
@@ -2844,7 +2942,7 @@ function updateScene(scn, dt) {
     } else {
       // Even a vertical hand can't reach: straighten the arm toward the floor and
       // let the fingertips find it (see placeFingertips).
-      const floorPt = new THREE.Vector3(palmPt.x, 0, palmPt.z);
+      const floorPt = new THREE.Vector3(palmPt.x, scn.atCase ? scn.caseTop : 0, palmPt.z);
       const armDir = floorPt.sub(sh).normalize();
       armIK(s, side, sh.clone().addScaledVector(armDir, palmReach * 0.995), pole);
       placeFingertips(s, side);
@@ -3010,7 +3108,7 @@ function updateScene(scn, dt) {
   // open in between.
   if (!scn.patch) {
     const A = scn.anchors;
-    scn.patch = { back: skinPatch(s, A.shoulders.index, 0.14), knee: skinPatch(s, A.kneeL.index, 0.14),
+    scn.patch = { back: skinPatch(s, (scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.glute : A.kneeL).index, 0.14),
       L: skinPatch(s, A.foldL[STRIKE_K].index, 0.16), R: skinPatch(s, A.foldR[STRIKE_K].index, 0.16) };
     scn.curl = { L: null, R: null };
   }
@@ -3055,7 +3153,8 @@ const IMPLEMENTS = {
   // `giver`: layers over the disciplinarian's beat poses while this implement is held. The
   // paddle's contact keeps the relaxed torso (the pose editor's pose was set on it) and
   // lifts the right shoulder a little; raised, the shoulder draws back.
-  paddle:    { mark: 8 / 3, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
+  // `lapOnly`: its rest and contact fits are built on the seat's geometry, so it isn't offered over the case.
+  paddle:    { mark: 8 / 3, lapOnly: true, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
 };
 const REST_GAP = 0.001;   // an implement at rest: its lowest point this far off the skin
 const REST_SEGS = [['pelvis', 'spine1'], ['thighL', 'shinL'], ['thighR', 'shinR'], ['shinL', 'footL'], ['shinR', 'footR']];
@@ -3679,6 +3778,8 @@ function sceneAnchors(s) {
     // Resting left hand: mid-back, just below the underbust line (below Aya's top).
     shoulders: toSurface('spine1', [0, Y.under - 0.03 * H, 0]),
     glute: toSurface('pelvis', [0, Y.hip - 0.03 * H, 0]),
+    // Over the case the resting left hand lies on the small of the back.
+    lowback: toSurface('spine1', [0, Y.waist - 0.02 * H, 0]),
     // A short strip of candidates per side, from the fold (index 0) up toward the
     // glute; the strike search prefers the lowest one the arm can reach flat.
     foldL: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),

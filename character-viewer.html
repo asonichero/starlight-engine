@@ -98,6 +98,8 @@
   <div class="tabs" id="sc-giver"></div>
   <div class="sub" style="margin:8px 0 3px">Subject</div>
   <div class="tabs" id="sc-subject"></div>
+  <div class="sub" style="margin:8px 0 3px">Position</div>
+  <div class="tabs" id="sc-position"></div>
   <div class="sub" style="margin:8px 0 3px">Beat</div>
   <div class="poses" id="sc-beats"></div>
   <div class="row" style="margin-top:8px"><label><span>Swing speed</span><span id="v-t-speed">1.00×</span></label><input id="s-t-speed" type="range" min="0.25" max="3" step="0.05" value="1"></div>
@@ -226,7 +228,7 @@ scene.add(floor);
 const view = { lineup: false, skeleton: false, weights: false, wire: false, spin: false, voxel: 0.010, pose: 'Relaxed', selected: 'aya' };
 let chars = {};
 // Discipline scene settings (applied to the engine's scene state when it's built).
-const sc = { sound: true, implement: 'hand', on: false, giver: 'aya', subject: 'kiko', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
+const sc = { sound: true, position: 'lap', implement: 'hand', on: false, giver: 'aya', subject: 'kiko', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
 let scn = null;   // the engine's scene state while shown
 // Pose editor state (see POSE EDITOR); while `on`, the scene is frozen and edited by hand.
 const PE = { on: false };
@@ -655,7 +657,7 @@ function buildScene() {
   const g = build(sc.giver), s = build(sc.subject);
   for (const c of [g, s]) { if (chars[c.key]) S.copyMarks(chars[c.key], c); if (moodSel[c.key] && moodSel[c.key] !== 'none') S.setMood(c, moodSel[c.key]); }
   for (const c of [g, s]) { scene.add(c.group); scene.add(c.helper); applyViewToChar(c); }
-  scn = S.createDisciplineScene(scene, g, s, { lower: !!lowered[sc.subject] });
+  scn = S.createDisciplineScene(scene, g, s, { lower: !!lowered[sc.subject], position: sc.position });
   if (lowered[sc.giver]) S.setLowered(g, 'bottom', true);
   for (const c of [g, s]) if (briefsDown[c.key]) S.setLowered(c, 'briefs', true);
   scn.onImpact = (side, strength) => Sound.clap(strength);
@@ -711,6 +713,25 @@ document.getElementById('sc-on').onclick = () => {
   else { clearScene(); camera.position.set(1.2, 1.25, 3.2); }
   placeChars(); refreshSceneUI();
 };
+// Positions: across the lap, or bent over the flight case with palms flat on it.
+[['lap', 'Across the lap'], ['case', 'Over the case']].forEach(([id, label]) => {
+  const b = document.createElement('button');
+  b.textContent = label; b.dataset.pos = id;
+  b.onclick = () => {
+    if (sc.position === id) return;
+    sc.position = id;
+    if (sc.on) buildScene();
+    refreshPositions();
+  };
+  document.getElementById('sc-position').appendChild(b);
+});
+function refreshPositions() {
+  document.querySelectorAll('#sc-position button').forEach(b => b.classList.toggle('on', b.dataset.pos === sc.position));
+  // The paddle is lap-only (see IMPLEMENTS); fall back to the hand when it can't be used.
+  if (sc.position === 'case' && S.IMPLEMENTS[sc.implement].lapOnly) { sc.implement = 'hand'; if (scn) scn.setImplement('hand'); }
+  document.querySelectorAll('#sc-implements button').forEach(b => { b.disabled = sc.position === 'case' && !!S.IMPLEMENTS[b.dataset.impl].lapOnly; });
+  if (typeof refreshImplements === 'function') refreshImplements();
+}
 // Implements (engine IMPLEMENTS): what the disciplinarian holds.
 Object.keys(S.IMPLEMENTS).forEach(name => {
   const b = document.createElement('button');
@@ -720,7 +741,7 @@ Object.keys(S.IMPLEMENTS).forEach(name => {
   document.getElementById('sc-implements').appendChild(b);
 });
 function refreshImplements() { document.querySelectorAll('#sc-implements button').forEach(b => b.classList.toggle('on', b.dataset.impl === sc.implement)); }
-refreshImplements();
+refreshImplements(); refreshPositions();
 document.getElementById('sc-sound').onclick =e => { sc.sound = !sc.sound; e.target.classList.toggle('on', sc.sound); };
 // One smack at a time (as in the game): lift, strike the next side, hold on contact.
 document.getElementById('sc-smack').onclick = () => { if (!scn) return; if (PE.on) PE.stop(); if (sc.loop) { sc.loop = false; scn.setLoop(false); refreshSceneUI(); } if (!scn.busy()) scn.cycle(); };

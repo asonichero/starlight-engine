@@ -457,3 +457,13 @@ The game and viewer were driven headless in Chrome with puppeteer. Test hooks ar
   - *Which angle:* Aya's correction cuts to a new angle every five smacks. In Kenji's the player picks with buttons or keys 1–5, drags to orbit the shot's pivot in any direction, and scrolls or pinches to zoom. Picking an angle resets the orbit.
 - **Wall positions:** in Kenji's scene Rin and Kiko now stand along the back wall toward the subject's head side (x 0.35 and 1.65), so the Head shot sees both past Aya's head.
 - **Dialogue:** a click anywhere, or Space, moves every line on straight away, auto-played ones included.
+
+
+## Over the case (new position)
+
+- **What it is:** `createDisciplineScene(parent, g, s, { position: 'case' })`. The subject stands facing +X, bent at the hips, arms down to palms flat on the lid of a flight case; the disciplinarian stands at the subject's left (world −Z), facing +Z and turned `CASE_YAW` toward the subject's hips. The swinging (right) arm points at the subject's rear exactly as it does from the seat, so the strike fit, press, marks and far-side shoulder turn are shared with the lap. The default (`'lap'`) is unchanged.
+- **Where it lives:** tables and helpers (`CASE_*`, `standAt`, `casePalm`, `buildCase`) sit just above `buildBench`. `scn.baseQ`/`reactQ`/`giverBaseQ` hold the position's poses. `sceneAnchors` has a new `lowback` anchor (the disciplinarian's resting left hand); the right hand rests on the hip (`glute`) instead of the thigh.
+- **Tuning:** `CASE_PITCH` (torso pitch, 84°), `CASE_GIVER_AT` / `CASE_YAW` (where the disciplinarian stands), and `opts.caseHeight` (default 0.88 × the subject's hip-joint height, so the lid scales per character). Palms go where `casePalm` puts them (arms 94% of a straight reach).
+- **Paddle:** lap only (`IMPLEMENTS.paddle.lapOnly`). Its rest and contact fits use the seat's geometry; over the case it falls back to the hand, and the viewer disables the button.
+- **Viewer:** a Position choice (Across the lap / Over the case) in the Discipline scene section.
+- **Checked** headlessly (Aya→Kiko, Kenji→Rin): relaxed, raised and contact on both sides, hand and hair brush, with the shorts down; a 10-smack loop ran without errors. Not done: the game (`starlight-game.html`) doesn't use the case position yet, and the reaction pose (`CASE_SUBJECT_REACT`) has only had a first look.
