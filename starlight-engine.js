@@ -2344,7 +2344,8 @@ CASE_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(CASE_SUBJ_REACT_Q.L).map(b 
 // The paddle's reaction over the case (from a pose-editor report) is a buck, not the other implements'
 // reaction: the hips come forward and sink, the knees bend and the feet stay planted where they are (the feet
 // turn to stay flat). `shift` is the body's move at full reaction (m, for a 1.58 m subject; world axes).
-const CASE_BUCK = { shift: [0.066, -0.025, -0.009],
+const CASE_PADDLE_GAZE = { neck: [0.6, 13.8, -3.4], head: [0.8, -25.2, 7.5] };
+const CASE_BUCK = { shift: [0.066, -0.025, -0.009], leftHand: [0, 0.025, -0.013],
   spine1: [-12.4, 0, 0], spine2: [-10.9, 0, 0],
   thighL: [-87.5, -1, -3], thighR: [-87.5, 1, 3], shinL: [22.7, 0, 0], shinR: [22.7, 0, 0], footL: [-16.9, 0, 0], footR: [-16.9, 0, 0] };
 const CASE_BUCK_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_BUCK), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_BUCK)) };
@@ -2731,7 +2732,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // The disciplinarian's pose for a beat, with the implement's own layer if it has one.
   const giverQCache = {};
   scn.giverQ = beat => {
-    const layers = !scn.atCase && scn.implement && IMPLEMENTS[scn.implement].giver;
+    const layers = scn.implement && (scn.atHead ? null : scn.atCase ? IMPLEMENTS[scn.implement].giverCase : IMPLEMENTS[scn.implement].giver);
     const L = layers && layers[beat];
     if (!L) return scn.giverBaseQ[beat];
     const k = scn.implement + beat;
@@ -2903,6 +2904,9 @@ function updateScene(scn, dt) {
     const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
     leftPt = shL0.clone().add(new THREE.Vector3(HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion)).lerp(leftPt, navW);
   }
+  // Over the case, bucking away from the paddle: the hips move under the resting left hand, which holds its place.
+  if (scn.atCase && !scn.atHead && scn.buck) leftPt.addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), -s.spec.H / 1.58 * scn.reaction)
+    .addScaledVector(new THREE.Vector3(...CASE_BUCK.leftHand), s.spec.H / 1.58 * clamp(swing - 1, 0, 1));   // (and a little up and toward the disciplinarian, as set)
   setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
   let restPt = knee.p;
   const thighN = scn.atHead ? giverRight : knee.n;
@@ -3183,6 +3187,12 @@ function updateScene(scn, dt) {
   // `scn.gaze = 'head'` turns the look to the back of the subject's head instead (aftercare).
   if (scn.gaze === 'head') lookAt(g, s.bones.head.getWorldPosition(new THREE.Vector3()), 0.7);
   else lookAt(g, glute.p, 0.42);
+  // Over the case, the paddle's contact twists the back, so the look is trimmed back toward the subject.
+  if (scn.atCase && !scn.atHead && scn.tool && scn.tool.wide && swing > 1) {
+    const w = clamp(swing - 1, 0, 1);
+    for (const b of ['neck', 'head']) g.bones[b].quaternion.multiply(new THREE.Quaternion().slerp(degQ(CASE_PADDLE_GAZE[b]), w));
+    g.bones.neck.updateMatrixWorld(true);
+  }
   if (scn.atHead) {
     // The gaze trim comes in as the arm rises and stays through contact (raised's offsets easing to contact's).
     const w = clamp(swing, 0, 1), c = clamp(swing - 1, 0, 1);
@@ -3351,8 +3361,9 @@ const IMPLEMENTS = {
   // `giver`: layers over the disciplinarian's beat poses while this implement is held. The
   // paddle's contact keeps the relaxed torso (the pose editor's pose was set on it) and
   // lifts the right shoulder a little; raised, the shoulder draws back.
-  // Over the case the disciplinarian's stance is the position's own, so the paddle adds nothing to it.
-  paddle:    { mark: 8 / 3, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
+  // `giverCase`: over the case the stance is the position's own; the paddle only twists the upper back toward
+  // the subject on contact (from a pose-editor report).
+  paddle:    { mark: 8 / 3, build: buildPaddle, giverCase: { contact: { spine2: [10, 36, 0], clavL: [-1.4, 2.5, -10.1] } }, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
 };
 const REST_GAP = 0.001;   // an implement at rest: its lowest point this far off the skin
 const REST_SEGS = [['pelvis', 'spine1'], ['thighL', 'shinL'], ['thighR', 'shinR'], ['shinL', 'footL'], ['shinR', 'footR']];
