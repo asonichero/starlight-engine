@@ -2352,6 +2352,7 @@ const HEAD_SUBJECT_BASE = {
   thighL: [0, 0, -3], thighR: [0, 0, 3], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [0, 0, 0], footR: [0, 0, 0],
   spine1: [-2, 0, 0], spine2: [-2, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
   upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+  fingersL: [0, 0, -27.5], fingersR: [0, 0, 27.5],   // a loose curl on the head
 };
 // Struck: the back hollows, the chest comes forward and the head lifts.
 const HEAD_SUBJECT_REACT = { ...HEAD_SUBJECT_BASE, spine1: [-8, 0, 0], spine2: [-10, 0, 0], neck: [-8, 0, 0], head: [-4, 0, 0] };
@@ -2366,15 +2367,25 @@ HEAD_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(HEAD_SUBJ_REACT_Q.L).map(b 
 // straight), and turn toward the subject's hips as the arm comes up. Hanging hands (m, × height, from
 // the shoulder in the disciplinarian's frame): down, outward and forward.
 const HEAD_GIVER_AT = [-0.266, -0.386];
-const HEAD_YAW_RELAXED = -2, HEAD_YAW_STRIKE = 30;
+const HEAD_YAW_RELAXED = 9, HEAD_YAW_STRIKE = 30;
 const HEAD_HANG = { down: 0.312, out: 0.048, fwd: 0.007 };
+// Raised and on contact the turn swings the feet round, so those beats re-plant them with their own leg
+// angles (from a pose-editor report); the left hand's place on the navel is the anchor's, the same for both.
+const HEAD_STRIKE_LEGS = { thighL: [-7.9, -1.6, -0.7], footL: [12.5, 0.9, -10.1], thighR: [14.4, -0.4, -3.5], footR: [-8.5, -1.5, 15.2] };
 const HEAD_GIVER_BEAT = {
   relaxed: { spine1: [3.8, -1.1, -3.9], spine2: [1.3, 1.6, 4], neck: [0, 0, 0] },
-  raised:  CASE_GIVER_BEAT.raised,
-  contact: CASE_GIVER_BEAT.contact,
+  raised:  { ...CASE_GIVER_BEAT.raised, spine1: [13.5, 0, 7.2], spine2: [-3.8, 7.4, 6.3], ...HEAD_STRIKE_LEGS },
+  contact: { ...CASE_GIVER_BEAT.contact, ...HEAD_STRIKE_LEGS },
 };
+// The raised arm's elbow (world, from the shoulder: out to the side and a little up) and the gaze's
+// trim as the arm is raised (neck and head offsets after the look, local degrees).
+const HEAD_POLE_RAISED = new THREE.Vector3(-0.184, -0.12, -0.198);
+// Where the raised hand's palm goes, from the shoulder (m, for 1.7 m tall; world axes): the elbow as edited in
+// the pose editor with the hand continuing the forearm.
+const HEAD_RAISED_HAND = new THREE.Vector3(-0.192, 0.103, 0.042);
+const HEAD_GAZE_RAISED = { neck: [-6.3, -1.4, 11.5], head: [-0.6, -21.9, 4.2] };
 const HEAD_GIVER_Q = poseTable(CASE_GIVER_BASE, HEAD_GIVER_BEAT);
-const HEAD_PALM = { dir: [0.55, 0.8, -0.3], fingers: [-0.5, 0, 0.85], lift: 0.012, pole: [0.1, 0.1, 0.5] };
+const HEAD_PALM = { dir: [0.21, 0.42, -0.88], fingers: [-0.92, 0.33, -0.19], lift: 0.019, pole: [0.1, 0.1, 0.5] };
 
 // Puts `ch` (already posed) so that its pelvis joint is at `at` with the group turned to
 // `quat`, then drops it until its feet rest on the floor.
@@ -2979,7 +2990,7 @@ function updateScene(scn, dt) {
   const fix = tool && scn.toolFix[scn.implement + (wide ? 'B' : scn.side)];
   const contactPt = wide ? strikeFit.palmC.clone().add(fix || new THREE.Vector3()) : tool ? strike.p.clone().addScaledVector(strike.n, tool.off - 0.004)
     .addScaledVector(strikeFit.f, -tool.along).addScaledVector(thumbW, -tool.across).add(fix || new THREE.Vector3()) : strike.p;
-  let raisedPt = shR.clone().add(new THREE.Vector3(-0.1, 0.3, -0.06).multiplyScalar(g.spec.H / 1.7));
+  let raisedPt = shR.clone().add((scn.atHead ? HEAD_RAISED_HAND : new THREE.Vector3(-0.1, 0.3, -0.06)).clone().multiplyScalar(g.spec.H / 1.7));
   // A wide implement raised (WIDE_RAISED): the blade's face placed and turned from the
   // shoulder, and the palm centre (what the swing moves) where that puts the hand.
   let wideUp = null;
@@ -3128,16 +3139,22 @@ function updateScene(scn, dt) {
   // `scn.gaze = 'head'` turns the look to the back of the subject's head instead (aftercare).
   if (scn.gaze === 'head') lookAt(g, s.bones.head.getWorldPosition(new THREE.Vector3()), 0.7);
   else lookAt(g, glute.p, 0.42);
+  if (scn.atHead) {
+    const w = clamp(1 - Math.abs(swing - 1), 0, 1);
+    if (w > 0) for (const b of ['neck', 'head']) g.bones[b].quaternion.multiply(new THREE.Quaternion().slerp(degQ(HEAD_GAZE_RAISED[b]), w));
+    g.bones.neck.updateMatrixWorld(true);
+  }
 
   // Elbow poles: tucked at rest, up and back when raised, then wherever the strike
   // fit puts it at contact.
   const POLE_REST = new THREE.Vector3(-0.1, -0.15, -0.5);
-  const POLE_RAISED = new THREE.Vector3(-0.3, 0.2, -0.45);
+  const POLE_RAISED = scn.atHead ? HEAD_POLE_RAISED : new THREE.Vector3(-0.3, 0.2, -0.45);
   const poleStrike = strikeFit.E.clone().sub(shR);
   // (A wide implement's elbow starts where its rest fit puts it.)
   const poleUp = wide ? wideUp.pole : POLE_RAISED;
   const poleOff = swing <= 1 ? (wide ? (wideRest.pole || wideRest.E.clone().sub(shR)) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
-  const poleR = shR.clone().add(poleOff);
+  // (Hands on head: from where the shoulder is now, after the lean, so the set elbow directions hold.)
+  const poleR = (scn.atHead ? g.bones.upperArmR.getWorldPosition(new THREE.Vector3()) : shR).clone().add(poleOff);
   // Swinging hand: flat on the thigh at rest; palm forward when raised, turning
   // toward the target during the strike; flat on the target, wrist straight, at contact.
   // Resting an implement, the palm tilts REST_TILT so the head end dips onto the thigh
@@ -3167,7 +3184,7 @@ function updateScene(scn, dt) {
     // the elbow clear, and may put it behind the back.)
     armIK(g, 'R', scn.handR.clone().sub(T.palmC.clone().applyQuaternion(scn.handQ)), poleR, null, null, null, false, true);
     setHandWorld(g, 'R', scn.handQ);
-  } else armIKClear(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);
+  } else (scn.atHead && swing > 0.3 && swing < 1.6 ? armIK : armIKClear)(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);   // hands on head: the raised elbow goes where the pole puts it
   // Implement on the skin: where its striking face actually is against where it should
   // be (4 mm into the skin, like the palm), and half the difference into the correction.
   // The same at rest, so it lies on the thigh without sinking in: across the skin, the
@@ -3957,7 +3974,7 @@ function sceneAnchors(s) {
     // Over the case the resting left hand lies on the small of the back.
     lowback: toSurface('spine1', [0, Y.waist - 0.02 * H, 0]),
     // Hands on head: the disciplinarian's left hand rests against the navel (front, so marching +Z).
-    navel: toSurface('spine1', [0, Y.belly, 0], 1),
+    navel: toSurface('spine1', [0, Y.waist, 0], 1),
     // ... and the swinging hand rests by the near cheek (the subject's left, as the strike strip's x).
     cheekL: toSurface('pelvis', [hipA * 0.42, Y.hip - 0.03 * H, 0]),
     // A short strip of candidates per side, from the fold (index 0) up toward the
