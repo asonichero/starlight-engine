@@ -2353,19 +2353,23 @@ CASE_BUCK_Q.B = Object.fromEntries(Object.keys(CASE_BUCK_Q.L).map(b => [b, CASE_
 const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
 
 // ── Hands on knees ─────────────────────────────────────────────
-// The subject stands free, bent forward at the hips (KNEES_PITCH from upright) with the knees bent, palms on
-// the front of the knees and the back flat. The disciplinarian stands and behaves as over the case (same
-// stance, side and reach); only the subject's pose and hands differ, and there is no case.
-const KNEES_PITCH = 60;
+// The subject stands free with straight legs, bent forward at the hips (KNEES_PITCH from upright, nearly level)
+// with the legs leaning back (KNEES_LEG_BACK) so the hips sit behind the feet and the weight stays over them,
+// palms on the front of the knees. The disciplinarian stands and behaves as over the case (same stance, side
+// and reach); only the subject's pose and hands differ, and there is no case. Struck with the hand or hair
+// brush, only the head moves; struck with the paddle the knees give lightly and the body leans forward, the feet
+// staying planted (the legs are solved to keep them there, see kneesBody).
+const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
+const KNEES_BUCK = { dx: 0.03, dy: -0.045, pitch: 6 };   // the paddle's buckle: m forward and down, degrees of lean (1.58 m subject)
 const KNEES_SUBJECT_BASE = {
-  // World angles forward from upright: thighs +40°, shins −25° (the knees flexed 65°), the soles flat.
   // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
-  thighL: [-(40 + KNEES_PITCH), 0, -4], thighR: [-(40 + KNEES_PITCH), 0, 4], shinL: [65, 0, 0], shinR: [65, 0, 0], footL: [-25, 0, 0], footR: [-25, 0, 0],
+  thighL: [KNEES_LEG_BACK - KNEES_PITCH, 0, -4], thighR: [KNEES_LEG_BACK - KNEES_PITCH, 0, 4], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [-KNEES_LEG_BACK, 0, 0], footR: [-KNEES_LEG_BACK, 0, 0],
   spine1: [-6, 0, 0], spine2: [-8, 0, 0], neck: [-30, 0, 0], head: [-12, 0, 0],
   upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
   fingersL: [0, 0, -35], fingersR: [0, 0, 35],
 };
-const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-44, 0, 0], head: [-16, 0, 0] };
+// Only the head moves when struck.
+const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, neck: [-44, 0, 0], head: [-16, 0, 0] };
 const KNEES_BASE_Q = poseQuats(KNEES_SUBJECT_BASE);
 const KNEES_REACT_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_SUBJECT_REACT), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_SUBJECT_REACT)) };
 KNEES_REACT_Q.B = Object.fromEntries(Object.keys(KNEES_REACT_Q.L).map(b => [b, KNEES_REACT_Q.L[b].clone().slerp(KNEES_REACT_Q.R[b], 0.5)]));
@@ -2470,6 +2474,36 @@ function buildCase(top, x0, x1) {
   return g;
 }
 
+// Hands on knees: positions the standing subject for this frame and solves the legs to keep the feet planted.
+// The body leans (`pitch` degrees more than stood) and the pelvis moves (`dx` forward, `dy` up, m) as the
+// paddle's buckle asks, then each leg's thigh, shin and foot are set in the sagittal plane so the ankles stay
+// where they were (the knee forward of the line from hip to ankle, the sole flat).
+function kneesBody(scn, k) {
+  const s = scn.s, sc = s.spec.H / 1.58, DEG = Math.PI / 180;
+  const pitch = KNEES_PITCH + KNEES_BUCK.pitch * k;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch * DEG));
+  const pel = new THREE.Vector3(...s.spec.J.pelvis).applyQuaternion(q);
+  const target = scn.kneesPelvis.clone().add(new THREE.Vector3(KNEES_BUCK.dx * k * sc, KNEES_BUCK.dy * k * sc, 0));
+  s.group.quaternion.copy(q);
+  s.group.position.copy(target).sub(pel);
+  s.group.updateMatrixWorld(true);
+  for (const side of ['L', 'R']) {
+    const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
+    const H = th.getWorldPosition(new THREE.Vector3()), A = scn.kneesAnkle[side];
+    const L1 = sh.position.length(), L2 = ft.position.length();
+    const dx = A.x - H.x, dy = H.y - A.y;
+    const d = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * 0.999);
+    const base = Math.atan2(dx, dy);
+    const al = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1)), be = Math.acos(clamp((L2 * L2 + d * d - L1 * L1) / (2 * L2 * d), -1, 1));
+    const ft_ = base + al, fs_ = base - be;   // thigh and shin forward angles from straight down
+    const eu = new THREE.Euler().setFromQuaternion(th.quaternion, 'YXZ');   // keep the thigh's splay, replace its pitch
+    th.quaternion.setFromEuler(new THREE.Euler(-ft_ - pitch * DEG, eu.y, eu.z, 'YXZ'));
+    sh.quaternion.setFromEuler(new THREE.Euler(ft_ - fs_, 0, 0, 'YXZ'));
+    ft.quaternion.setFromEuler(new THREE.Euler(fs_, 0, 0, 'YXZ'));
+  }
+  s.group.updateMatrixWorld(true);
+}
 function buildBench(top) {
   const g = new THREE.Group();
   const caseMat = new THREE.MeshStandardMaterial({ color: lin(0x1a1a1c), roughness: 0.75, metalness: 0.15 });
@@ -2673,7 +2707,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
-  if (atKnees) { scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; }
+  if (atKnees) { scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_REACT_Q; }   // (the paddle's buckle is the body's, in kneesBody)
   if (atHead) {
     scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.buckQ = HEAD_BUCK_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
     scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
@@ -2726,6 +2760,11 @@ function createDisciplineScene(parent, g, s, opts = {}) {
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (atKnees ? KNEES_PITCH : CASE_PITCH) * Math.PI / 180));
     standAt(s, q, new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
     scn.subjBasePos = s.group.position.clone();
+    if (atKnees) {
+      // What the legs are solved against: the pelvis and the planted ankles, as stood.
+      scn.kneesPelvis = s.bones.pelvis.getWorldPosition(new THREE.Vector3());
+      scn.kneesAnkle = { L: s.bones.footL.getWorldPosition(new THREE.Vector3()), R: s.bones.footR.getWorldPosition(new THREE.Vector3()) };
+    }
     if (!atKnees) {
     // The lid is set from the subject's own height, and runs from just short of the palms
     // to well past them.
@@ -2803,8 +2842,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     if (!IMPLEMENTS[name]) name = 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
-    scn.buck = !!(scn.atCase && !scn.atKnees && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
-    if (scn.atCase && !scn.atHead) scn.buckQ = CASE_BUCK_Q;
+    scn.buck = !!(scn.atCase && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
+    if (scn.atCase && !scn.atHead && !scn.atKnees) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
     scn.toolFix = {}; scn.fitCache.B = null; scn.handQ = null;
     // Middle and end finger joints closed round the handle (or straightened again).
@@ -2890,10 +2929,11 @@ function updateScene(scn, dt) {
     s.group.quaternion.copy(qz).multiply(scn.subjBaseQ);
     s.group.position.copy(scn.subjBasePos).sub(scn.feetPivot).applyQuaternion(qz).add(scn.feetPivot);
     if (!scn.buck) s.group.position.y += HEAD_RISE * (s.spec.H / 1.58) * scn.reaction;
-  } else if (scn.atCase && scn.buck) {
+  } else if (scn.atCase && !scn.atKnees && scn.buck) {
     // Over the case, bucking away from the paddle: the body moves, the feet stay put (the legs' pose does that).
     s.group.position.copy(scn.subjBasePos).addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), s.spec.H / 1.58 * scn.reaction);
   }
+  if (scn.atKnees) kneesBody(scn, scn.buck ? scn.reaction : 0);
   s.group.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
 
@@ -2926,7 +2966,7 @@ function updateScene(scn, dt) {
     leftPt = shL0.clone().add(new THREE.Vector3(HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion)).lerp(leftPt, navW);
   }
   // Over the case, bucking away from the paddle: the hips move under the resting left hand, which holds its place.
-  if (scn.atCase && !scn.atHead && scn.buck) leftPt.addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), -s.spec.H / 1.58 * scn.reaction)
+  if (scn.atCase && !scn.atHead && !scn.atKnees && scn.buck) leftPt.addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), -s.spec.H / 1.58 * scn.reaction)
     .addScaledVector(new THREE.Vector3(...CASE_BUCK.leftHand), s.spec.H / 1.58 * clamp(swing - 1, 0, 1));   // (and a little up and toward the disciplinarian, as set)
   setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
   let restPt = knee.p;
