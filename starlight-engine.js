@@ -1451,9 +1451,9 @@ function makeBodyMaterial(m) {
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;\nuniform vec4 uCapA[' + CAPS + '], uCapB[' + CAPS + '];\nuniform float uCapN;' + CONTACT_GLSL + FINGER_BEND_GLSL)
+      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest, vRestN;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;\nuniform vec4 uCapA[' + CAPS + '], uCapB[' + CAPS + '];\nuniform float uCapN;' + CONTACT_GLSL + FINGER_BEND_GLSL)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 fbPos = vec3(position);\nbendFingers(fbPos, objectNormal);')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = fbPos;\nvLayerA = layerA; vLayerB = layerB; vHair = hairCov; vRest = position; vCrease = creaseD;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = fbPos;\nvLayerA = layerA; vLayerB = layerB; vHair = hairCov; vRest = position; vRestN = normal; vCrease = creaseD;')
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
         if (uPressAmt > 0.0) {
           vec3 dP = transformed - uPressP;
@@ -1503,7 +1503,7 @@ function makeBodyMaterial(m) {
           transformed -= objectNormal * dent * wC;
         }` + CONTACT_VERTEX);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform float uStripeY[32], uStripeA[32], uStripeX0[32], uStripeX1[32], uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest, vRestN;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform float uStripeY[32], uStripeA[32], uStripeX0[32], uStripeX1[32], uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
       .replace('#include <color_fragment>', `
         // Each layer's edge distance, thresholded over about a pixel; innermost first.
         vec4 wa = fwidth(vLayerA) * 0.75 + 1e-5, wb = fwidth(vLayerB) * 0.75 + 1e-5;
@@ -1538,6 +1538,8 @@ function makeBodyMaterial(m) {
           float sadd = 0.0;
           float rear = smoothstep(0.0, -0.025, vRest.z);
           float cleft = smoothstep(0.006, 0.016, abs(vRest.x));
+          // Only the very top/back of the curve: where the surface faces straight back (so no wrapping round the sides).
+          rear *= smoothstep(0.6, 0.8, -vRestN.z);
           for (int si = 0; si < 32; si++) {
             if (float(si) >= uStripeN) break;
             float dy = abs(vRest.y - uStripeY[si]);
@@ -1545,7 +1547,7 @@ function makeBodyMaterial(m) {
             sadd += uStripeA[si] * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
           }
           sadd *= rear * cleft;
-          stripeCol = mix(uMarkCol, vec3(0.16, 0.03, 0.2), smoothstep(0.45, 0.95, sadd));
+          stripeCol = mix(uMarkCol, uMarkCol * vec3(0.45, 0.35, 0.4), smoothstep(0.4, 0.95, sadd));   // deepens within red
           mk = max(mk, min(1.0, sadd * 1.0));
           outfitStripe = stripeCol;
         }
@@ -3769,7 +3771,7 @@ const ROD_DEPTH = 0.004;
 // How far (× the glute's height) the rod's strikes reach: from this far down from the top of the glute to this far down the thigh
 // below the fold. Strikes favour the upper half of that range (ROD_UPPER of them land there).
 const ROD_REACH = 0.25, ROD_UPPER = 0.7;
-const ROD = { len: 0.345, width: 0.014, thick: 0.014, corner: 0.006, neck: 0, handle: 0.115, handleW: 0.014, butt: 0.012, lean: 0.25, seat: 0.02 };
+const ROD = { len: 0.43, width: 0.010, thick: 0.010, corner: 0.004, neck: 0, handle: 0.115, handleW: 0.010, butt: 0.012, lean: 0.25, seat: 0.02 };
 function buildRod(g) { return buildPaddle(g, true); }
 // A strike height along the rod's strip (0 … 11): ROD_UPPER of rolls fall in the upper half, the rest in the lower.
 function rodRoll() { const up = Math.random() < ROD_UPPER; return (up ? 5.5 : 0) + Math.random() * 5.5; }
@@ -3908,7 +3910,7 @@ function buildPaddle(g, rod = false) {
     probes.push([knuckle.clone().addScaledVector(along, ax + (bx - ax) * t).addScaledVector(palmN, ay + (by - ay) * t)
       .addScaledVector(across, offF * FINGER_PITCH * H), grip.fR]);
   }
-  return { grp, probes, faceProbes, wide: true, rod, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: rod ? 0.012 : P.width / 2,   // (a rod's footprint is a narrow strip)
+  return { grp, probes, faceProbes, wide: true, rod, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: rod ? 0.008 : P.width / 2,   // (a rod's footprint is a narrow strip)
     palmC: along.clone().multiplyScalar(0.42 * hl), along, palmN, grip: { curl: grip.curl, bend: grip.bend },
     thumbQ, thumbFit: thumbFit && { near: thumbFit.near, al: thumbFit.al, be: thumbFit.be, ga: thumbFit.ga, ph: thumbFit.ph, pi: thumbFit.pi, on: thumbFit.on }, handleSpan: [xb, xs] };
 }
@@ -4369,7 +4371,8 @@ function addMark(ch, side, pointW, weight = 1) {
 // Each contact leaves a stripe where the bar actually touched: at the height it landed (rest space, through the pelvis, so it
 // stays put as the body moves), across the length of the bar (not the cleft it bridges, nor beyond its ends). Each adds
 // STRIPE_ADD of full colour; where several overlap they add up, and the colour goes from red toward purple as it deepens.
-const STRIPE_ADD = 0.15, STRIPES_MAX = 32, STRIPE_HALF = 0.007;
+const STRIPES_FRESH = 6, STRIPE_GONE_PER_SEC = 0.02;   // older stripes keep this share per second
+const STRIPE_ADD = 0.15, STRIPES_MAX = 32, STRIPE_HALF = 0.0035;   // (a stripe is a little under the rod's 10 mm: 7 mm)
 function addStripe(ch, pointW, axisW, halfLen) {
   const i = BONES.indexOf('pelvis');
   const inv = ch.bones.pelvis.matrixWorld.clone().multiply(ch.mesh.skeleton.boneInverses[i]).invert();
@@ -4378,6 +4381,8 @@ function addStripe(ch, pointW, axisW, halfLen) {
   ch.stripes = ch.stripes || [];
   ch.stripes.push({ y: c.y, x0: Math.min(e1.x, e2.x), x1: Math.max(e1.x, e2.x), a: STRIPE_ADD, a0: STRIPE_ADD });
   if (ch.stripes.length > STRIPES_MAX) ch.stripes.shift();
+  // Only the latest STRIPES_FRESH keep the marks' slow fading; any older ones go almost at once (see fadeMarks).
+  ch.stripes.forEach((s, k) => { if (k < ch.stripes.length - STRIPES_FRESH) s.old = true; });
   applyStripes(ch);
 }
 function applyStripes(ch) {
@@ -4389,7 +4394,9 @@ function applyStripes(ch) {
 function fadeMarks(ch, dt) {
   if (ch.stripes && ch.stripes.length && !ch.marksHeld) {
     const keep = Math.pow(MARK_KEEP_PER_SEC, dt);
-    for (const s of ch.stripes) s.a = Math.max(s.a * keep, s.a0 * MARK_AFTER_CYCLE);
+    const gone = Math.pow(STRIPE_GONE_PER_SEC, dt);
+    for (const s of ch.stripes) s.a = s.old ? s.a * gone : Math.max(s.a * keep, s.a0 * MARK_AFTER_CYCLE);
+    if (ch.stripes.some(s => s.old && s.a < 0.003)) ch.stripes = ch.stripes.filter(s => !(s.old && s.a < 0.003));
     applyStripes(ch);
   }
   if (!ch.marks || ch.marksHeld) return;
