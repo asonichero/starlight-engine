@@ -2367,6 +2367,17 @@ const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
 const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
 const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
 const KNEES_UP = 12;
+// The swinging hand's rest (pose-editor report, 12:54), measured from the right shoulder (m, for a 1.72 m
+// disciplinarian; world axes before any lean): the empty hand hangs close by the near hip, the brush hangs at the
+// side pointing forward, its face toward the subject. `at` is where the hand goes (the palm, as the rest
+// placement otherwise puts it); `pole`: the upper arm's elbow direction; `n`: the surface normal the palm faces.
+// The paddle hangs a little further back at the side (12:56 report): its face centre moves by `dface` (m, for 1.7 m
+// tall, world axes) from the case's rest, and the elbow points `elbow` from the shoulder.
+const KNEES_PADDLE_REST = { dface: [-0.059, -0.068, -0.050], elbow: [-0.143, -0.970, -0.221] };
+const KNEES_REST = {
+  hand:  { delta: [0.016, -0.047, -0.014], pole: [-0.026, -0.265, 0.13] },
+  brush: { delta: [-0.030, -0.172, -0.226], pole: [-0.059, -0.290, -0.010], n: [-0.958, 0.191, -0.212] },
+};
 // Paddle on contact (from the 12:52 report): the back hollows a little more and the blade rolls up to 95° (the
 // case's 82.5° otherwise). The hair brush's contact leans the disciplinarian's upper back further forward (17.6°).
 const KNEES_PADDLE_BACK = { spine1: [-8.4, 0, -1.6], spine2: [-18.6, 0, -1.3] };
@@ -2385,6 +2396,8 @@ const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, spine2: [-12.8, 0, -0.5], n
 const KNEES_BASE_Q = poseQuats(KNEES_SUBJECT_BASE);
 const KNEES_REACT_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_SUBJECT_REACT), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_SUBJECT_REACT)) };
 KNEES_REACT_Q.B = Object.fromEntries(Object.keys(KNEES_REACT_Q.L).map(b => [b, KNEES_REACT_Q.L[b].clone().slerp(KNEES_REACT_Q.R[b], 0.5)]));
+const KNEES_PADDLE_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_PADDLE_BACK), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_PADDLE_BACK)) };
+KNEES_PADDLE_Q.B = Object.fromEntries(Object.keys(KNEES_PADDLE_Q.L).map(b => [b, KNEES_PADDLE_Q.L[b].clone().slerp(KNEES_PADDLE_Q.R[b], 0.5)]));
 
 // ── Hands on head ──────────────────────────────────────────────
 // The subject stands free, upright, facing +X, hands on the back of the head with the elbows out.
@@ -2722,7 +2735,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
-  if (atKnees) { scn.giverBaseQ = KNEES_GIVER_Q; scn.giverBeat = KNEES_GIVER_BEAT; scn.wideContact = { ...CASE_WIDE_CONTACT, roll: KNEES_ROLL }; scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_REACT_Q; }   // (the paddle's buckle is the body's, in kneesBody)
+  if (atKnees) { scn.giverBaseQ = KNEES_GIVER_Q; scn.giverBeat = KNEES_GIVER_BEAT; scn.wideContact = { ...CASE_WIDE_CONTACT, roll: KNEES_ROLL };
+    { const R = caseWideRest(), sc = 1; scn.wideRest = { ...R, face: [R.face[0] + KNEES_PADDLE_REST.dface[0], R.face[1] + KNEES_PADDLE_REST.dface[1], R.face[2] + KNEES_PADDLE_REST.dface[2]], elbow: KNEES_PADDLE_REST.elbow }; } scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_PADDLE_Q; }   // (the paddle's rise is the body's, in kneesBody)
   if (atHead) {
     scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.buckQ = HEAD_BUCK_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
     scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
@@ -3234,6 +3248,10 @@ function updateScene(scn, dt) {
     restAt = restSkin.clone().addScaledVector(thighN, tool.off + REST_GAP).addScaledVector(fingersFwd, -tool.along)
       .addScaledVector(thumbR, -tool.across).add(scn.toolFix[scn.implement + 'rest'] || new THREE.Vector3());
   }
+  if (scn.atKnees && !wide) {
+    const R = tool ? KNEES_REST.brush : KNEES_REST.hand;
+    restAt = restAt.clone().add(new THREE.Vector3(...R.delta).multiplyScalar(g.spec.H / 1.72));
+  }
   const want = swing <= 1 ? restAt.clone().lerp(raisedPt, swing) : raisedPt.clone().lerp(contactPt, swing - 1);
   // A wide implement's fist runs from the hip to above the shoulder: a straight line would
   // take it through the disciplinarian's own shoulder, so the path bows out to their side
@@ -3247,7 +3265,7 @@ function updateScene(scn, dt) {
   // The lean is capped (~8°) so it stays a subtle adjustment; the swinging arm
   // isn't included at contact — the strike search fits the arm to the torso instead.
   const reachTargets = [['L', scn.handL]];
-  if (swing < 0.3) reachTargets.push(['R', scn.handR]);
+  if (swing < 0.3 && !scn.atKnees) reachTargets.push(['R', scn.handR]);   // (hands on knees: the hanging hand never leans the body)
   const pivot = new THREE.Vector3(), shW = new THREE.Vector3();
   const MAX_LEAN = 0.14;
   let leaned = 0;
@@ -3296,7 +3314,7 @@ function updateScene(scn, dt) {
   const poleStrike = strikeFit.E.clone().sub(shR);
   // (A wide implement's elbow starts where its rest fit puts it.)
   const poleUp = wide ? wideUp.pole : POLE_RAISED;
-  const poleOff = swing <= 1 ? (wide ? (wideRest.pole || wideRest.E.clone().sub(shR)) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
+  const poleOff = swing <= 1 ? (wide ? (wideRest.pole || wideRest.E.clone().sub(shR)) : scn.atKnees ? new THREE.Vector3(...(tool ? KNEES_REST.brush : KNEES_REST.hand).pole) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
   // (Hands on head: from where the shoulder is now, after the lean, so the set elbow directions hold.)
   const poleR = (scn.atHead ? g.bones.upperArmR.getWorldPosition(new THREE.Vector3()) : shR).clone().add(poleOff);
   // Swinging hand: flat on the thigh at rest; palm forward when raised, turning
@@ -3309,6 +3327,7 @@ function updateScene(scn, dt) {
     const dW = fingersFwd.clone().cross(thighN.clone().negate()).normalize().addScaledVector(fingersFwd, 0.15).normalize();
     restN = thighN.clone().multiplyScalar(Math.cos(REST_TILT)).addScaledVector(dW, Math.sin(REST_TILT)).normalize();
   }
+  if (scn.atKnees && tool && !wide) restN = new THREE.Vector3(...KNEES_REST.brush.n);
   // Hanging at the side the palm faces the body, the fingers continuing the forearm.
   const sideIn = giverRight.clone().negate();
   const flatR = swing < 0.3 && !scn.atHead ? restN : swing > 1.9 ? strike.n : null;
@@ -3328,7 +3347,7 @@ function updateScene(scn, dt) {
     // the elbow clear, and may put it behind the back.)
     armIK(g, 'R', scn.handR.clone().sub(T.palmC.clone().applyQuaternion(scn.handQ)), poleR, null, null, null, false, true);
     setHandWorld(g, 'R', scn.handQ);
-  } else (scn.atHead && swing > 0.3 && swing < 1.6 ? armIK : armIKClear)(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);   // hands on head: the raised elbow goes where the pole puts it
+  } else (scn.atHead && swing > 0.3 && swing < 1.6 ? armIK : armIKClear)(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : scn.atKnees && tool && swing < 0.3 ? new THREE.Vector3(0, -1, 0) : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);   // hands on head: the raised elbow goes where the pole puts it
   // Implement on the skin: where its striking face actually is against where it should
   // be (4 mm into the skin, like the palm), and half the difference into the correction.
   // The same at rest, so it lies on the thigh without sinking in: across the skin, the
@@ -3339,7 +3358,7 @@ function updateScene(scn, dt) {
   // a nearest-skin-point test is fooled in creases (thigh against glute). Refitted every
   // third frame.
   scn.restTick = (scn.restTick || 0) + 1;
-  if (tool && !wide && swing < 0.03 && tool.probes && scn.restTick % 3 === 0) {
+  if (tool && !wide && !scn.atKnees && swing < 0.03 && tool.probes && scn.restTick % 3 === 0) {
     g.bones.handR.updateMatrixWorld(true);
     const M = g.bones.handR.matrixWorld, face = tool.face.clone().applyMatrix4(M);
     const low = restClearance(s, tool.probes, M);
