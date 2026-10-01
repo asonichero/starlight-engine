@@ -716,8 +716,8 @@ document.getElementById('sc-on').onclick = () => {
   else { clearScene(); camera.position.set(1.2, 1.25, 3.2); }
   placeChars(); refreshSceneUI();
 };
-// Positions: across the lap, or bent over the flight case with palms flat on it.
-[['lap', 'Across the lap'], ['case', 'Over the case']].forEach(([id, label]) => {
+// Positions: across the lap, bent over the flight case with palms flat on it, or standing with hands on head.
+[['lap', 'Across the lap'], ['case', 'Over the case'], ['head', 'Hands on head']].forEach(([id, label]) => {
   const b = document.createElement('button');
   b.textContent = label; b.dataset.pos = id;
   b.onclick = () => {

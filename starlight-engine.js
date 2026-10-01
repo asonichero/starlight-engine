@@ -2343,6 +2343,26 @@ const CASE_SUBJ_REACT_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_SUBJECT_REACT),
 CASE_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(CASE_SUBJ_REACT_Q.L).map(b => [b, CASE_SUBJ_REACT_Q.L[b].clone().slerp(CASE_SUBJ_REACT_Q.R[b], 0.5)]));
 const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
 
+// ── Hands on head ──────────────────────────────────────────────
+// The subject stands free, upright, facing +X, hands on the back of the head with the elbows out.
+// The disciplinarian stands as over the case (same stance, same side), the right hand striking the
+// rear; the left hand rests at their side while relaxed and against the subject's navel when the
+// arm is raised and on contact, steadying them.
+const HEAD_SUBJECT_BASE = {
+  thighL: [0, 0, -3], thighR: [0, 0, 3], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [0, 0, 0], footR: [0, 0, 0],
+  spine1: [-2, 0, 0], spine2: [-2, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+};
+// Struck: the back hollows, the chest comes forward and the head lifts.
+const HEAD_SUBJECT_REACT = { ...HEAD_SUBJECT_BASE, spine1: [-8, 0, 0], spine2: [-10, 0, 0], neck: [-8, 0, 0], head: [-4, 0, 0] };
+const HEAD_SUBJ_BASE_Q = poseQuats(HEAD_SUBJECT_BASE);
+const HEAD_SUBJ_REACT_Q = { L: poseQuats(HEAD_SUBJECT_BASE, HEAD_SUBJECT_REACT), R: poseQuats(HEAD_SUBJECT_BASE, mirrorPose(HEAD_SUBJECT_REACT)) };
+HEAD_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(HEAD_SUBJ_REACT_Q.L).map(b => [b, HEAD_SUBJ_REACT_Q.L[b].clone().slerp(HEAD_SUBJ_REACT_Q.R[b], 0.5)]));
+// Where each palm goes on the skull: a direction from its centre (head frame: +X the subject's left,
+// +Y up, +Z forward), the fingers' direction along the surface, and the elbow's pole (world, from
+// the shoulder; out to the side and a little forward).
+const HEAD_PALM = { dir: [0.55, 0.8, -0.3], fingers: [-0.5, 0, 0.85], lift: 0.012, pole: [0.1, 0.1, 0.5] };
+
 // Puts `ch` (already posed) so that its pelvis joint is at `at` with the group turned to
 // `quat`, then drops it until its feet rest on the floor.
 function standAt(ch, quat, at) {
@@ -2580,10 +2600,11 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
     fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
-    atCase: opts.position === 'case', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
-  const atCase = scn.atCase;
+    atCase: opts.position === 'case' || opts.position === 'head', atHead: opts.position === 'head', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
+  const atCase = scn.atCase, atHead = scn.atHead;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  if (atHead) { scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; }
   const seat = atCase ? null : seatGiver(g);
   if (atCase) {
     // Standing at the subject's left, turned toward the subject's hips.
@@ -2613,7 +2634,13 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   resetCharacter(s);
   s.target = scn.baseQ;
   s.pose = {}; for (const b of BONES) s.pose[b] = s.target[b].clone();
-  if (atCase) {
+  if (atHead) {
+    // Standing free: upright, facing +X (local +X is the subject's left, world −Z, as in the lap).
+    for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
+    standAt(s, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
+    const hp = s.spec.prims.find(P => P.bone === 'head' && P.tag === 'head');
+    scn.headPrim = { c: new THREE.Vector3(...hp.c).sub(new THREE.Vector3(...s.spec.J.head)), r: new THREE.Vector3(...hp.r) };
+  } else if (atCase) {
     // Bent over the case: pitched forward about the hips, facing +X (local +X is the
     // subject's left, world −Z, as in the lap).
     for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
@@ -2781,16 +2808,25 @@ function updateScene(scn, dt) {
     const n = A.n.clone().transformDirection(M);
     return { p: p.addScaledVector(n, palm), n };
   };
-  const shoulders = posed(scn.atCase ? 'lowback' : 'shoulders'), glute = posed('glute');
+  const shoulders = posed(scn.atHead ? 'navel' : scn.atCase ? 'lowback' : 'shoulders'), glute = posed('glute');
   // The resting hand takes the thigh nearer the disciplinarian (subject's left, toward −Z).
   const knee = posed(scn.atCase ? 'cheekL' : 'kneeL');   // over the case the hand rests by the near cheek instead
   // Left hand: same no-clip rule as the strike — palm set slightly below the skin,
   // and the skin under it compressed onto the palm plane.
   const REST_DEPTH = 0.008;
   const backN = shoulders.n, backSkin = shoulders.p.clone().addScaledVector(backN, -palm);
-  const leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
-  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, 1, '2');
-  const restPt = knee.p, thighN = knee.n;
+  // Hands on head: the left hand eases from hanging at the disciplinarian's side to the navel
+  // as the arm comes up, and presses the skin only once it's there.
+  const navW = scn.atHead ? easeInOut(clamp(swing / 0.7, 0, 1)) : 1;
+  const giverRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(g.group.quaternion);
+  let leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
+  if (scn.atHead) {
+    const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
+    leftPt = shL0.clone().addScaledVector(new THREE.Vector3(0, -1, 0), armReach(g, 'L') * 0.9).lerp(leftPt, navW);
+  }
+  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
+  let restPt = knee.p;
+  const thighN = scn.atHead ? giverRight : knee.n;
   // Far-side (right) strikes: the disciplinarian turns their shoulders toward the
   // far glute — a small twist about the vertical, split across the spine, that
   // brings the right shoulder forward over the target. It builds through the
@@ -2810,6 +2846,8 @@ function updateScene(scn, dt) {
     g.group.updateMatrixWorld(true);
   }
   const shR = g.bones.upperArmR.getWorldPosition(new THREE.Vector3());
+  // Hands on head: the swinging hand hangs at the side at rest (an implement with it).
+  if (scn.atHead) restPt = shR.clone().addScaledVector(new THREE.Vector3(0, -1, 0), armReach(g, 'R') * 0.9);
 
   // Contact delivery. The strike alternates between the left and right glute/thigh
   // fold. Palm flat on the skin with a straight wrist means the forearm lies along
@@ -2934,7 +2972,7 @@ function updateScene(scn, dt) {
   // reach; otherwise the arm straightens toward the floor and the fingertips touch.
   const floorN = new THREE.Vector3(0, 1, 0);
   const sHand = s.spec.H * 0.106;
-  for (const side of ['L', 'R']) {
+  for (const side of scn.atHead ? [] : ['L', 'R']) {
     const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
     const out = side === 'L' ? -1 : 1;   // subject's left is world −Z in this orientation
     const pole = sh.clone().add(new THREE.Vector3(-0.4, 0.1, out * 0.25));
@@ -2991,13 +3029,30 @@ function updateScene(scn, dt) {
     }
   }
 
+  // Hands on head: palms on the back of the skull, fingers along it, elbows out.
+  if (scn.atHead) {
+    const M = s.bones.head.matrixWorld, hp = scn.headPrim, hv = HEAD_PALM;
+    for (const side of ['L', 'R']) {
+      const sg = side === 'L' ? 1 : -1;
+      const d = new THREE.Vector3(hv.dir[0] * sg, hv.dir[1], hv.dir[2]).normalize();
+      const surf = hp.c.clone().add(new THREE.Vector3(d.x * hp.r.x, d.y * hp.r.y, d.z * hp.r.z)).applyMatrix4(M);
+      const n = new THREE.Vector3(d.x / hp.r.x, d.y / hp.r.y, d.z / hp.r.z).normalize().transformDirection(M);
+      const target = surf.addScaledVector(n, 0.0085 * s.spec.H + hv.lift);
+      const fingers = new THREE.Vector3(hv.fingers[0] * sg, hv.fingers[1], hv.fingers[2]).transformDirection(M);
+      const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+      const out = side === 'L' ? -1 : 1;
+      const pole = sh.clone().add(new THREE.Vector3(hv.pole[0], hv.pole[1], hv.pole[2] * out));
+      armIK(s, side, target, pole, n, fingers);
+    }
+  }
+
   // Swinging hand: rest above the knee → raised → contact.
   // Resting with an implement: its head lies on the thigh instead of the palm, just
   // touching (REST_GAP off the skin, no compression): the hand is set back by the head's
   // offsets, with the fingers forward, plus a correction learnt at rest (below).
   const REST_TILT = 18 * Math.PI / 180;
   const restSkin = restPt.clone().addScaledVector(thighN, -palm);
-  let restAt = scn.atCase && !tool ? restPt.clone().addScaledVector(thighN, CASE_REST_HOVER) : restPt;
+  let restAt = scn.atCase && !scn.atHead && !tool ? restPt.clone().addScaledVector(thighN, CASE_REST_HOVER) : restPt;
   // A wide implement rests across both sites, flat on the seat (its fit's `rest`), lifted
   // off the skin to REST_GAP (no compression), plus its own correction learnt at rest.
   const wideRest = wide ? strikeFit.rest : null;
@@ -3069,8 +3124,10 @@ function updateScene(scn, dt) {
     const dW = fingersFwd.clone().cross(thighN.clone().negate()).normalize().addScaledVector(fingersFwd, 0.15).normalize();
     restN = thighN.clone().multiplyScalar(Math.cos(REST_TILT)).addScaledVector(dW, Math.sin(REST_TILT)).normalize();
   }
-  const flatR = swing < 0.3 ? restN : swing > 1.9 ? strike.n : null;
-  const palmToTarget = flatR ? null : new THREE.Vector3(0, 0, 1)
+  // Hanging at the side the palm faces the body, the fingers continuing the forearm.
+  const sideIn = giverRight.clone().negate();
+  const flatR = swing < 0.3 && !scn.atHead ? restN : swing > 1.9 ? strike.n : null;
+  const palmToTarget = flatR ? null : (scn.atHead ? sideIn.clone().lerp(new THREE.Vector3(0, 0, 1), clamp(swing, 0, 1)).normalize() : new THREE.Vector3(0, 0, 1))
     .lerp(contactPt.clone().sub(scn.handR).normalize(), clamp(swing - 1, 0, 1)).normalize();
   const atContact = swing > 1.9;
   if (wide) {
@@ -3142,7 +3199,8 @@ function updateScene(scn, dt) {
     setPress(s, faceW, strikeFit.n, (T.halfW + 0.015) / 0.55, amt, '', strikeFit.a, T.halfLen - T.halfW, deep);
   }
   const shL = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
-  armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), backN, fingersFwd);
+  if (scn.atHead && navW < 0.98) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), null, null, giverRight);   // hanging: palm to the thigh
+  else armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), backN, fingersFwd);
 
   // Fingers follow the skin under each hand: the palm is rigid and flat, so on a
   // rounded surface the fingers curl down until their pads meet the skin. The
@@ -3150,21 +3208,21 @@ function updateScene(scn, dt) {
   // open in between.
   if (!scn.patch) {
     const A = scn.anchors;
-    scn.patch = { back: skinPatch(s, (scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.cheekL : A.kneeL).index, 0.14),
+    scn.patch = { back: skinPatch(s, (scn.atHead ? A.navel : scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.cheekL : A.kneeL).index, 0.14),
       L: skinPatch(s, A.foldL[STRIKE_K].index, 0.16), R: skinPatch(s, A.foldR[STRIKE_K].index, 0.16) };
     scn.curl = { L: null, R: null };
   }
   const onSkin = idx => { const pts = posePatch(s, idx); return q => skinSignedDist(pts, q); };
-  const wantL = wrapFingers(g, 'L', onSkin(scn.patch.back));
+  const wantL = scn.atHead && navW < 0.5 ? 12 : wrapFingers(g, 'L', onSkin(scn.patch.back));
   const wantR = tool ? (tool.grip || IMPLEMENTS[scn.implement].grip).curl   // closed round the implement's handle
-    : swing < 0.3 ? wrapFingers(g, 'R', onSkin(scn.patch.knee))
+    : swing < 0.3 ? (scn.atHead ? 12 : wrapFingers(g, 'R', onSkin(scn.patch.knee)))
     : swing > 1.9 ? wrapFingers(g, 'R', onSkin(scn.patch[scn.side])) : 4;
   const k = timed ? 1 - Math.exp(-dt * 30) : a;
   for (const [side, want] of [['L', wantL], ['R', wantR]]) {
     scn.curl[side] = scn.curl[side] == null ? want : scn.curl[side] + (want - scn.curl[side]) * k;
     setFingerCurl(g, side, scn.curl[side]);
   }
-  if (scn.atCase) {
+  if (scn.atCase && !scn.atHead) {
     g.bones.thumbL.quaternion.copy(degQ(CASE_THUMB_L));
     // The resting hand's thumb is tucked in, easing out as the hand lifts to swing.
     if (!tool && !wide) g.bones.thumb2R.quaternion.slerp(degQ(CASE_REST_THUMB), clamp(1 - swing / 0.3, 0, 1));
@@ -3736,7 +3794,16 @@ function wideFit(scn, posed, shR, palm) {
   // the press flattens them onto the face (see updateScene).
   const W_ = scn.wideContact, cn = nAt(W_.roll), cb = cn.clone().cross(line);
   const cc = mid.clone().addScaledVector(line, W_.slide * g.spec.H / 1.7).addScaledVector(cb, -W_.drop * g.spec.H / 1.7);
-  const hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
+  let hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
+  // Standing, the glutes' rear-most skin stands well proud of the low sites: the blade meets that.
+  if (scn.atHead) {
+    const ca0 = line.clone().applyAxisAngle(cn, W_.yaw * DEG), cb0 = cn.clone().cross(ca0);
+    for (let i = 0; i < seat.length; i += 6) {
+      const dx = seat[i] - cc.x, dy = seat[i + 1] - cc.y, dz = seat[i + 2] - cc.z;
+      if (Math.abs(dx * ca0.x + dy * ca0.y + dz * ca0.z) > T.halfLen || Math.abs(dx * cb0.x + dy * cb0.y + dz * cb0.z) > T.halfW) continue;
+      hi = Math.max(hi, dx * cn.x + dy * cn.y + dz * cn.z);
+    }
+  }
   const contactCands = [];
   const ca = line.clone().applyAxisAngle(cn, W_.yaw * DEG);
   armCands(contactCands, { yaw: W_.yaw, slide: W_.slide, a: ca, n: cn, Q: handQuat(ca, cn), face: cc.addScaledVector(cn, hi - W_.depth), roll: W_.roll, pose: 0 }, 1, true);
@@ -3838,9 +3905,9 @@ function posePatch(ch, idx) {
 function sceneAnchors(s) {
   const spec = s.spec, Y = spec.Y, J = spec.J, H = spec.H;
   const pos = s.mesh.geometry.attributes.position, v = new THREE.Vector3();
-  const toSurface = (bone, origin) => {
+  const toSurface = (bone, origin, dz = -1) => {
     const p = origin.slice();
-    for (let i = 0; i < 400 && field(spec, p) < 0; i++) p[2] -= 0.001;
+    for (let i = 0; i < 400 && field(spec, p) < 0; i++) p[2] += dz * 0.001;
     const n = norm(gradient(spec, p, 0.0015, field(spec, p)));
     // Nearest mesh vertex to the surface point; its skinned position is tracked per frame.
     const sp = new THREE.Vector3(...p);
@@ -3865,6 +3932,8 @@ function sceneAnchors(s) {
     glute: toSurface('pelvis', [0, Y.hip - 0.03 * H, 0]),
     // Over the case the resting left hand lies on the small of the back.
     lowback: toSurface('spine1', [0, Y.waist - 0.02 * H, 0]),
+    // Hands on head: the disciplinarian's left hand rests against the navel (front, so marching +Z).
+    navel: toSurface('spine1', [0, Y.belly, 0], 1),
     // ... and the swinging hand rests by the near cheek (the subject's left, as the strike strip's x).
     cheekL: toSurface('pelvis', [hipA * 0.42, Y.hip - 0.03 * H, 0]),
     // A short strip of candidates per side, from the fold (index 0) up toward the
@@ -5123,7 +5192,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createDisciplineScene, POSITIONS: ['lap', 'case'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createDisciplineScene, POSITIONS: ['lap', 'case', 'head'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
