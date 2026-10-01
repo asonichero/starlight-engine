@@ -2361,6 +2361,19 @@ HEAD_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(HEAD_SUBJ_REACT_Q.L).map(b 
 // Where each palm goes on the skull: a direction from its centre (head frame: +X the subject's left,
 // +Y up, +Z forward), the fingers' direction along the surface, and the elbow's pole (world, from
 // the shoulder; out to the side and a little forward).
+// The disciplinarian's place and turn. They stand behind the subject's rear plane, square on to the
+// subject while relaxed (from a pose-editor report: pelvis at x −29.5 cm, facing the subject, the back
+// straight), and turn toward the subject's hips as the arm comes up. Hanging hands (m, × height, from
+// the shoulder in the disciplinarian's frame): down, outward and forward.
+const HEAD_GIVER_AT = [-0.295, -0.435];
+const HEAD_YAW_RELAXED = -2, HEAD_YAW_STRIKE = 30;
+const HEAD_HANG = { down: 0.306, out: 0.039, fwd: 0.029 };
+const HEAD_GIVER_BEAT = {
+  relaxed: { spine1: [3.8, -1.1, -3.9], spine2: [1.3, 1.6, 4], neck: [0, 0, 0] },
+  raised:  CASE_GIVER_BEAT.raised,
+  contact: CASE_GIVER_BEAT.contact,
+};
+const HEAD_GIVER_Q = poseTable(CASE_GIVER_BASE, HEAD_GIVER_BEAT);
 const HEAD_PALM = { dir: [0.55, 0.8, -0.3], fingers: [-0.5, 0, 0.85], lift: 0.012, pole: [0.1, 0.1, 0.5] };
 
 // Puts `ch` (already posed) so that its pelvis joint is at `at` with the group turned to
@@ -2604,15 +2617,19 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const atCase = scn.atCase, atHead = scn.atHead;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
-  if (atHead) { scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; }
+  if (atHead) {
+    scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
+    scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
+  }
   const seat = atCase ? null : seatGiver(g);
   if (atCase) {
     // Standing at the subject's left, turned toward the subject's hips.
     resetCharacter(g);
-    g.target = CASE_GIVER_Q[scn.beat];
+    g.target = scn.giverBaseQ[scn.beat];
     g.pose = {}; for (const b of BONES) { g.pose[b] = g.target[b].clone(); g.bones[b].quaternion.copy(g.pose[b]); }
-    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), CASE_YAW * Math.PI / 180),
-      new THREE.Vector3(CASE_GIVER_AT[0], g.spec.J.pelvis[1], CASE_GIVER_AT[1]));
+    const at = atHead ? HEAD_GIVER_AT : CASE_GIVER_AT;
+    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (atHead ? HEAD_YAW_RELAXED : CASE_YAW) * Math.PI / 180),
+      new THREE.Vector3(at[0], g.spec.J.pelvis[1], at[1]));
   } else {
     g.target = GIVER_Q[scn.beat];
     scn.bench = seat.bench;
@@ -2783,6 +2800,13 @@ function updateScene(scn, dt) {
   }
   if (timed) g.target = scn.giverQ(swing < 0.35 ? 'relaxed' : swing < 1.5 ? 'raised' : 'contact');
   scn.swing = swing;
+  // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
+  // subject's hips as the arm comes up (about the vertical through the pelvis, so the feet stay put).
+  if (scn.atHead) {
+    const yaw = lerp(HEAD_YAW_RELAXED, HEAD_YAW_STRIKE, easeInOut(clamp(swing / 0.6, 0, 1)));
+    g.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw * Math.PI / 180);
+    g.group.updateMatrixWorld(true);
+  }
 
   // Joint-angle poses (subject blends toward the reaction pose).
   const a = 1 - Math.exp(-dt * 9);
@@ -2822,7 +2846,7 @@ function updateScene(scn, dt) {
   let leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
   if (scn.atHead) {
     const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
-    leftPt = shL0.clone().addScaledVector(new THREE.Vector3(0, -1, 0), armReach(g, 'L') * 0.9).lerp(leftPt, navW);
+    leftPt = shL0.clone().add(new THREE.Vector3(HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion)).lerp(leftPt, navW);
   }
   setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
   let restPt = knee.p;
@@ -2847,7 +2871,7 @@ function updateScene(scn, dt) {
   }
   const shR = g.bones.upperArmR.getWorldPosition(new THREE.Vector3());
   // Hands on head: the swinging hand hangs at the side at rest (an implement with it).
-  if (scn.atHead) restPt = shR.clone().addScaledVector(new THREE.Vector3(0, -1, 0), armReach(g, 'R') * 0.9);
+  if (scn.atHead) restPt = shR.clone().add(new THREE.Vector3(-HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion));
 
   // Contact delivery. The strike alternates between the left and right glute/thigh
   // fold. Palm flat on the skin with a straight wrist means the forearm lies along
@@ -3662,14 +3686,14 @@ const CASE_WIDE_CONTACT = { roll: 82.5, yaw: 0, slide: 0, drop: 0.01, depth: 0.0
 // right side, its face turned toward the subject. Face centre from the right shoulder (m, for 1.7 m
 // tall), the face's normal and long axis, all in the frame before the disciplinarian's yaw.
 const CASE_WIDE_REST = { face: [0.001, -0.661, 0.201], faceN: [0.967, -0.191, -0.167], axis: [0.135, -0.171, 0.976], elbow: [-0.174, -0.956, -0.237] };
-function caseWideRest() {
-  const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
+function caseWideRest(yaw = CASE_YAW) {
+  const c = Math.cos(yaw * Math.PI / 180), s = Math.sin(yaw * Math.PI / 180);
   const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
   const R = CASE_WIDE_REST;
   return { face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
 }
-function caseWideRaised() {
-  const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
+function caseWideRaised(yaw = CASE_YAW) {
+  const c = Math.cos(yaw * Math.PI / 180), s = Math.sin(yaw * Math.PI / 180);
   const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
   const R = WIDE_RAISED;
   return { ...R, face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
