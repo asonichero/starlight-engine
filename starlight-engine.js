@@ -2371,6 +2371,12 @@ const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
 const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
 const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
 const KNEES_UP = 12;
+// ── Bent over, feet spread ───────────────────────────────────
+// The hands-on-knees pose with the feet wide apart (ankles `SPREAD_ANKLE` either side of the centre line, 1.58 m
+// subject) and the palms on the fronts of the thighs. The disciplinarian stands wider and further back (from a
+// pose-editor report, Kenji with Aya) and turns toward the hips. The legs are solved in 3D (see kneesBody).
+const SPREAD_ANKLE = 0.275, SPREAD_ANKLE_X = -0.11;
+const SPREAD_GIVER_AT = [-0.30, -0.52], SPREAD_YAW = 43;
 const KNEES_PRESS_DEPTH = 0.003;   // the palm sinks this far into the skin at contact (12 mm elsewhere): the bent-over rear is steeper, so less
 // The swinging hand's rest (pose-editor report, 12:54), measured from the right shoulder (m, for a 1.72 m
 // disciplinarian; world axes before any lean): the empty hand hangs close by the near hip, the brush hangs at the
@@ -2520,6 +2526,7 @@ function kneesBody(scn, k) {
   s.group.quaternion.copy(q);
   s.group.position.copy(target).sub(pel);
   s.group.updateMatrixWorld(true);
+  if (scn.atSpread) { spreadLegs(scn); return; }
   for (const side of ['L', 'R']) {
     const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
     const H = th.getWorldPosition(new THREE.Vector3()), A = scn.kneesAnkle[side].clone();
@@ -2534,6 +2541,39 @@ function kneesBody(scn, k) {
     th.quaternion.setFromEuler(new THREE.Euler(-ft_ - pitch * DEG, eu.y, eu.z, 'YXZ'));
     sh.quaternion.setFromEuler(new THREE.Euler(ft_ - fs_, 0, 0, 'YXZ'));
     ft.quaternion.setFromEuler(new THREE.Euler(fs_, 0, 0, 'YXZ'));
+  }
+  s.group.updateMatrixWorld(true);
+}
+// Bent over with the feet spread: each leg solved in 3D so the ankle lands on `SPREAD_ANKLE` out from the centre line
+// (the knee forward of the hip-to-ankle line), the thigh and shin aimed with the least twist and the foot flat,
+// turned out about the vertical (30° left, 20° right toe-out, as edited).
+function spreadLegs(scn) {
+  const s = scn.s, sc = s.spec.H / 1.58, DEG = Math.PI / 180;
+  const root = s.group.matrixWorld;
+  for (const side of ['L', 'R']) {
+    const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
+    const sgn = side === 'L' ? -1 : 1;   // the subject's left is world −Z
+    const H = th.getWorldPosition(new THREE.Vector3());
+    const A = new THREE.Vector3(scn.kneesPelvis.x + SPREAD_ANKLE_X * sc, scn.kneesAnkle[side].y, sgn * SPREAD_ANKLE * sc);
+    const L1 = sh.position.length(), L2 = ft.position.length();
+    const d = clamp(H.distanceTo(A), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * 0.999);
+    const dir = A.clone().sub(H).normalize();
+    const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    const fwd = new THREE.Vector3(1, 0, 0).addScaledVector(dir, -dir.x).normalize();   // the knee bends forward (+X)
+    const K = H.clone().addScaledVector(dir, a).addScaledVector(fwd, h);
+    // Thigh: aim its rest direction at the knee, in the pelvis's frame.
+    const aim = (bone, to) => {
+      const parentInv = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const rest = bone.children[0] ? bone.children[0].position.clone().normalize() : new THREE.Vector3(0, -1, 0);
+      bone.quaternion.setFromUnitVectors(rest, to.clone().applyQuaternion(parentInv).normalize());
+      bone.updateMatrixWorld(true);
+    };
+    aim(th, K.clone().sub(H));
+    aim(sh, A.clone().sub(K));
+    // Foot flat on the floor, toes turned out about the vertical.
+    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (Math.PI / 2 + sgn * (side === 'L' ? 30 : 20) * DEG * -1));
+    ft.quaternion.copy(ft.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(yaw));
+    ft.updateMatrixWorld(true);
   }
   s.group.updateMatrixWorld(true);
 }
@@ -2736,7 +2776,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
     fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
-    atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees', atHead: opts.position === 'head', atKnees: opts.position === 'knees', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
+    atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees' || opts.position === 'spread', atHead: opts.position === 'head', atKnees: opts.position === 'knees' || opts.position === 'spread', atSpread: opts.position === 'spread', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
   if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
@@ -2752,8 +2792,8 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     resetCharacter(g);
     g.target = scn.giverBaseQ[scn.beat];
     g.pose = {}; for (const b of BONES) { g.pose[b] = g.target[b].clone(); g.bones[b].quaternion.copy(g.pose[b]); }
-    const at = atHead ? HEAD_GIVER_AT : CASE_GIVER_AT;
-    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (atHead ? HEAD_YAW_RELAXED : CASE_YAW) * Math.PI / 180),
+    const at = atHead ? HEAD_GIVER_AT : scn.atSpread ? SPREAD_GIVER_AT : CASE_GIVER_AT;
+    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (atHead ? HEAD_YAW_RELAXED : scn.atSpread ? SPREAD_YAW : CASE_YAW) * Math.PI / 180),
       new THREE.Vector3(at[0], g.spec.J.pelvis[1], at[1]));
   } else {
     g.target = GIVER_Q[scn.beat];
@@ -3153,7 +3193,9 @@ function updateScene(scn, dt) {
   // Hands on knees: palms on the front of the knees, fingers down, elbows out.
   if (scn.atKnees) {
     for (const side of ['L', 'R']) {
-      const knee = s.bones['shin' + side].getWorldPosition(new THREE.Vector3());
+      let knee = s.bones['shin' + side].getWorldPosition(new THREE.Vector3());
+      // Spread: the palms rest on the front of the thigh, 70% of the way down it.
+      if (scn.atSpread) knee = s.bones['thigh' + side].getWorldPosition(new THREE.Vector3()).lerp(knee, 0.7);
       const rK = s.spec.m.knee / 100 / (2 * Math.PI);
       const n = new THREE.Vector3(1, 0.1, 0).normalize();
       const target = knee.clone().addScaledVector(n, rK + 0.0085 * sH + 0.004).add(new THREE.Vector3(0, 0.02 * sH / 1.58, 0));
@@ -5402,7 +5444,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
