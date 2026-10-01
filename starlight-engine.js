@@ -2376,7 +2376,7 @@ const KNEES_UP = 12;
 const KNEES_PADDLE_REST = { dface: [-0.059, -0.068, -0.050], elbow: [-0.143, -0.970, -0.221] };
 const KNEES_REST = {
   hand:  { delta: [0.016, -0.047, -0.014], pole: [-0.026, -0.265, 0.13] },
-  brush: { delta: [-0.030, -0.172, -0.226], pole: [-0.059, -0.290, -0.010], n: [-0.958, 0.191, -0.212] },
+  brush: { delta: [-0.031, -0.179, -0.358], pole: [-0.027, -0.290, -0.053], n: [-0.989, 0.025, -0.148] },
 };
 // Paddle on contact (from the 12:52 report): the back hollows a little more and the blade rolls up to 95° (the
 // case's 82.5° otherwise). The hair brush's contact leans the disciplinarian's upper back further forward (17.6°).
