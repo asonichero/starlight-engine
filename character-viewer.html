@@ -643,6 +643,11 @@ const Sound = (() => {
       burst(t, 0.04, 3600, 1.0 * k); burst(t + 0.004, 0.06, 700, 0.55 * k);
       return;
     }
+    if (sc.implement === 'rod') {
+      // A thin bar: a high, sharp whip-crack with little body.
+      burst(t, 0.03, 4800, 1.0 * k); burst(t + 0.002, 0.05, 1500, 0.4 * k);
+      return;
+    }
     if (sc.implement === 'paddle') {
       // A broad board: a full, heavy crack with a deep body under it.
       burst(t, 0.07, 2000, 1.1 * k); burst(t + 0.003, 0.11, 420, 0.8 * k); burst(t + 0.006, 0.05, 4200, 0.35 * k);
