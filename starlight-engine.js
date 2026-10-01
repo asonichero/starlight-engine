@@ -2322,7 +2322,9 @@ const CASE_SUBJECT_REACT = {
   spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-48, 0, 0], head: [-16, 0, 0],
   upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
 };
-const CASE_GIVER_BASE = { thighL: [-24, 0, -9], thighR: [-24, 0, 9], shinL: [34, 0, 0], shinR: [34, 0, 0], footL: [-10, 0, 0], footR: [-10, 0, 0] };
+// The standing stance, from a pose-editor report: legs nearly straight, the feet planted flat
+// (the same for every beat and implement).
+const CASE_GIVER_BASE = { thighL: [-1.6, -1.2, 0.6], thighR: [-0.3, 1.5, -5.4], shinL: [-2, -3.5, -0.1], shinR: [-3.7, 3.7, -1.7], footL: [3.2, 1.1, -8.8], footR: [3.5, -1.5, 15.2] };
 const CASE_GIVER_BEAT = {
   relaxed: { spine1: [16, 0, 0], spine2: [8, 0, 0], neck: [0, 0, 0] },
   raised:  { spine1: [12, 0, 0], spine2: [4, 8, 0], neck: [4, 0, 0] },
@@ -3574,7 +3576,7 @@ const WIDE_RAISED = { face: [-0.2491, 0.3825, 0.089], faceN: [0.651, -0.455, 0.6
   elbow: [-0.3756, 0.247, -0.8932], fingers: [3, 0, 70] };
 // Over the case the sites face backward and up rather than up the body, so the blade's roll is
 // its own (from the viewer's pose editor); the raised blade is turned with the disciplinarian.
-const CASE_WIDE_CONTACT = { roll: 66, yaw: 0, slide: 0, drop: 0.01, depth: 0.02, elbow: [-0.7, -0.45, -0.55] };
+const CASE_WIDE_CONTACT = { roll: 82.5, yaw: 0, slide: 0, drop: 0.01, depth: 0.02, elbow: [-0.7, -0.45, -0.55] };
 function caseWideRaised() {
   const c = Math.cos(CASE_YAW * Math.PI / 180), s = Math.sin(CASE_YAW * Math.PI / 180);
   const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
