@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starlight — Sandbox</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #16161b; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: #e8e6e3; }
+  #view { position: fixed; top: 0; left: 0; right: 300px; bottom: 0; }
+  #panel { position: fixed; top: 0; right: 0; width: 300px; height: 100%; box-sizing: border-box; background: rgba(20,20,26,0.96);
+    border-left: 1px solid #2c2c36; padding: 14px 16px; overflow-y: auto; font-size: 13px; }
+  h1 { font-size: 15px; margin: 0 0 2px; }
+  .sub { color: #8a8a96; font-size: 11px; line-height: 1.5; margin-bottom: 8px; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #9aa0ac; margin: 14px 0 6px; border-bottom: 1px solid #2c2c36; padding-bottom: 4px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+  button { background: #2e2e3a; color: #e8e6e3; border: 1px solid #454555; border-radius: 4px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #3a3a48; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button.on { background: #6b5a2a; border-color: #c9a84c; color: #fff; }
+  button.go { background: #2a5a3a; border-color: #4ca86a; width: 100%; padding: 9px; font-size: 13px; margin-top: 4px; }
+  button.go.running { background: #6b2a2a; border-color: #c94c4c; }
+  .row { margin: 6px 0; display: flex; gap: 6px; }
+  .row button { flex: 1; }
+  #status { color: #8a8a96; font-size: 11px; margin-top: 8px; min-height: 2.6em; }
+  #loading { position: fixed; inset: 0 300px 0 0; display: flex; align-items: center; justify-content: center; background: #16161b; color: #8a8a96; font-size: 14px; z-index: 5; }
+  #loading.hide { display: none; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="loading">Loading the models…</div>
+<div id="panel">
+  <h1>Discipline sandbox</h1>
+  <div class="sub">Pick a pair, a position, an implement and a severity, then press Start. Drag to orbit, scroll to zoom.</div>
+
+  <h3>Disciplinarian</h3><div class="tabs" id="p-giver"></div>
+  <h3>Subject</h3><div class="tabs" id="p-subject"></div>
+  <h3>Position</h3><div class="tabs" id="p-position"></div>
+  <h3>Implement</h3><div class="tabs" id="p-implement"></div>
+  <h3>Severity</h3><div class="tabs" id="p-severity"></div>
+  <h3>Clothing</h3>
+  <div class="tabs"><button id="c-bottoms">Bottoms down</button><button id="c-briefs">Briefs down</button></div>
+  <h3>Session</h3>
+  <button class="go" id="go">Start</button>
+  <div class="row"><button id="clear">Clear marks</button><button id="sound" class="on">Sound</button></div>
+  <div id="status"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>document.write('<script src="starlight-engine.js?v=' + Date.now() + '"><\/script>');</script>
+<script>
+(function () {
+'use strict';
+const S = window.Starlight;
+const { PRESETS, ORDER, clone } = S;
+
+// ── Choices ──────────────────────────────────────────────
+const POSITIONS = [['lap', 'Across the lap'], ['case', 'Over the case'], ['head', 'Hands on head'], ['knees', 'Hands on knees'], ['spread', 'Bent over, feet spread']];
+const IMPLEMENTS = [['hand', 'Hand'], ['hairbrush', 'Hair brush'], ['rod', 'Rod'], ['paddle', 'Paddle']];
+// Severity: how hard each smack lands (the subject's reaction), how fast the arm moves, how many smacks, and the pause between.
+const SEVERITY = [
+  { name: 'Light',  strength: 0.35, speed: 0.8,  count: 8,  gap: 0.9 },
+  { name: 'Medium', strength: 0.6,  speed: 1.0,  count: 12, gap: 0.65 },
+  { name: 'Firm',   strength: 0.85, speed: 1.2,  count: 16, gap: 0.5 },
+  { name: 'Severe', strength: 1.0,  speed: 1.45, count: 22, gap: 0.35 },
+];
+// Camera for each position (from the disciplinarian's side).
+const CAMERA = {
+  lap:    { pos: [2.5, 1.5, 3.2], target: [0, 0.6, 0.2] },
+  case:   { pos: [-2.7, 1.45, -2.9], target: [-0.05, 0.85, -0.15] },
+  head:   { pos: [-3.2, 1.45, -2.9], target: [-0.1, 0.9, -0.3] },
+  knees:  { pos: [-2.8, 1.4, -3.0], target: [-0.05, 0.8, -0.2] },
+  spread: { pos: [-3.0, 1.45, -3.4], target: [-0.1, 0.85, -0.45] },
+};
+const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true };
+let scn = null, running = false, done = 0, since = 0, total = 0;
+
+// ── Three.js scene ───────────────────────────────────────
+const lin = S.lin;
+const viewEl = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(viewEl.clientWidth, viewEl.clientHeight);
+renderer.shadowMap.enabled = true; renderer.localClippingEnabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+viewEl.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x16161b);
+const camera = new THREE.PerspectiveCamera(35, viewEl.clientWidth / viewEl.clientHeight, 0.05, 50);
+const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xf4efe8, 0x2a2622, 0.55));
+const key = new THREE.DirectionalLight(0xfff1e0, 1.25); key.position.set(2, 4, 3); key.castShadow = true;
+key.shadow.bias = -0.0004; key.shadow.normalBias = 0.012; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -0.5, near: 0.5, far: 12 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fb8ff, 0.55); rim.position.set(-2.5, 2.5, -3); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 64), new THREE.MeshStandardMaterial({ color: lin(0x1c1c22), roughness: 0.95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+window.addEventListener('resize', () => {
+  camera.aspect = viewEl.clientWidth / viewEl.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(viewEl.clientWidth, viewEl.clientHeight);
+});
+
+// ── Sound: a clap per smack (as the viewer's) ────────────
+const Sound = (() => {
+  let ctx = null, buf = null;
+  const init = () => {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+      const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    } catch (e) { ctx = null; }
+  };
+  const burst = (t, dur, freq, peak) => {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.002 + dur);
+    s.connect(f); f.connect(g); g.connect(ctx.destination); s.start(t); s.stop(t + dur + 0.05);
+  };
+  const clap = (strength = 1) => {
+    if (!ctx || !sel.sound) return;
+    const t = ctx.currentTime, k = 0.25 + 0.2 * strength;
+    if (sel.implement === 'hairbrush') { burst(t, 0.04, 3600, k); burst(t + 0.004, 0.06, 700, 0.55 * k); }
+    else if (sel.implement === 'rod') { burst(t, 0.03, 4800, k); burst(t + 0.002, 0.05, 1500, 0.4 * k); }
+    else if (sel.implement === 'paddle') { burst(t, 0.07, 2000, 1.1 * k); burst(t + 0.003, 0.11, 420, 0.8 * k); burst(t + 0.006, 0.05, 4200, 0.35 * k); }
+    else { burst(t, 0.09, 2500, 0.9 * k); burst(t + 0.008, 0.05, 1100, 0.5 * k); }
+  };
+  return { init, clap };
+})();
+
+// ── The scene ────────────────────────────────────────────
+let pair = null;   // { g, s }
+function disposePair() {
+  if (!pair) return;
+  if (scn) {
+    // Marks stay with the person across rebuilds of the same pairing.
+    scn.dispose(); scn = null;
+  }
+  for (const c of [pair.g, pair.s]) S.disposeCharacter(c);
+  pair = null;
+}
+const savedMarks = {};   // key → { marks, stripes } kept while the same person is subject
+function build() {
+  if (pair) {
+    if (pair.s) savedMarks[pair.s.key] = { marks: pair.s.marks, stripes: pair.s.stripes };
+    disposePair();
+  }
+  const mk = k => S.buildCharacter(clone(PRESETS[k]), { voxel: 0.011, key: k });
+  const g = mk(sel.giver), s = mk(sel.subject);
+  for (const c of [g, s]) { scene.add(c.group); scene.add(c.helper); c.helper.visible = false; }
+  const sv = savedMarks[sel.subject];
+  if (sv) { s.marks = sv.marks; s.stripes = sv.stripes; S.copyMarks(s, s); }
+  scn = S.createDisciplineScene(scene, g, s, { lower: sel.bottoms, position: sel.position });
+  if (sel.briefs) S.setLowered(s, 'briefs', true);
+  scn.onImpact = (side, strength) => { Sound.clap(strength); done++; updateStatus(); };
+  scn.setImplement(sel.implement);
+  pair = { g, s };
+  scn.setBeat('relaxed');
+  const C = CAMERA[sel.position]; camera.position.set(...C.pos); controls.target.set(...C.target);
+  stopRun(); updateStatus();
+}
+
+// ── Running ──────────────────────────────────────────────
+function startRun() {
+  if (!scn) return;
+  const v = SEVERITY[sel.severity];
+  scn.timing = { ...scn.timing, speed: v.speed };
+  running = true; done = 0; since = 0; total = v.count; Sound.init();
+  document.getElementById('go').textContent = 'Stop'; document.getElementById('go').classList.add('running');
+  updateStatus();
+}
+function stopRun() {
+  running = false;
+  if (scn) scn.lower(0.5);
+  const b = document.getElementById('go'); b.textContent = 'Start'; b.classList.remove('running');
+  updateStatus();
+}
+function updateStatus() {
+  const v = SEVERITY[sel.severity];
+  document.getElementById('status').textContent = running
+    ? `${done} of ${total} smacks — ${v.name.toLowerCase()}.`
+    : done ? `Finished: ${done} smacks.` : 'Ready.';
+}
+
+// ── Choosers ─────────────────────────────────────────────
+function chooser(id, items, key, onPick) {
+  const el = document.getElementById(id); el.innerHTML = '';
+  items.forEach(([val, label]) => {
+    const b = document.createElement('button'); b.textContent = label; b.dataset.v = val;
+    b.onclick = () => { if (b.disabled) return; onPick(val); };
+    el.appendChild(b);
+  });
+}
+function refresh() {
+  const on = (id, v) => document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
+  on('p-giver', sel.giver); on('p-subject', sel.subject); on('p-position', sel.position); on('p-implement', sel.implement); on('p-severity', sel.severity);
+  // Dual-strike positions only offer dual-strike implements.
+  document.querySelectorAll('#p-implement button').forEach(b => { b.disabled = sel.position === 'spread' && !S.IMPLEMENTS[b.dataset.v].dual; });
+  document.getElementById('c-bottoms').classList.toggle('on', sel.bottoms);
+  document.getElementById('c-briefs').classList.toggle('on', sel.briefs);
+  document.getElementById('sound').classList.toggle('on', sel.sound);
+}
+chooser('p-giver', ORDER.map(k => [k, PRESETS[k].name]), 'giver', k => { if (sel.subject === k) sel.subject = sel.giver; sel.giver = k; refresh(); build(); });
+chooser('p-subject', ORDER.map(k => [k, PRESETS[k].name]), 'subject', k => { if (sel.giver === k) sel.giver = sel.subject; sel.subject = k; refresh(); build(); });
+chooser('p-position', POSITIONS, 'position', p => {
+  sel.position = p;
+  if (p === 'spread' && !S.IMPLEMENTS[sel.implement].dual) sel.implement = Object.keys(S.IMPLEMENTS).find(n => S.IMPLEMENTS[n].dual) || 'hand';
+  refresh(); build();
+});
+chooser('p-implement', IMPLEMENTS, 'implement', n => { sel.implement = n; refresh(); if (scn) { scn.setImplement(n); scn.setBeat('relaxed'); } });
+chooser('p-severity', SEVERITY.map((v, i) => [i, v.name]), 'severity', i => { sel.severity = i; refresh(); if (running) { scn.timing = { ...scn.timing, speed: SEVERITY[i].speed }; total = SEVERITY[i].count; updateStatus(); } });
+document.getElementById('c-bottoms').onclick = () => { sel.bottoms = !sel.bottoms; refresh(); build(); };
+document.getElementById('c-briefs').onclick = () => { sel.briefs = !sel.briefs; refresh(); build(); };
+document.getElementById('sound').onclick = () => { sel.sound = !sel.sound; refresh(); };
+document.getElementById('clear').onclick = () => { if (pair) { S.clearMarks(pair.s); delete savedMarks[pair.s.key]; } };
+document.getElementById('go').onclick = () => { if (running) stopRun(); else startRun(); };
+
+// ── Frame loop ───────────────────────────────────────────
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  if (pair && scn) {
+    if (running) {
+      since += dt;
+      const v = SEVERITY[sel.severity];
+      if (!scn.busy() && since > v.gap) {
+        if (done >= total) stopRun();
+        else { scn.cycle(v.strength); since = 0; }
+      }
+    }
+    const on = [pair.g, pair.s];
+    for (const ch of on) S.animateCharacter(ch, dt, t);
+    scn.update(dt);
+    for (const ch of on) S.fadeMarks(ch, dt);
+    for (const ch of on) { ch.group.updateMatrixWorld(true); S.bustSpring(ch, dt); }
+    for (const ch of on) S.bustContact(ch, on);
+    S.updateContacts(on);
+    const colliders = on.flatMap(S.bodyColliders);
+    for (const ch of on) S.hairStep(ch, dt, colliders);
+    for (const ch of on) S.faceStep(ch, dt);
+    for (const ch of on) S.skirtStep(ch, dt, on, [scn && scn.bench]);
+    for (const ch of on) S.bunchStep(ch);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// Build once the first frame is possible (the models take a moment).
+setTimeout(() => {
+  refresh(); build();
+  document.getElementById('loading').classList.add('hide');
+  frame();
+}, 50);
+// Test hook
+window.__sandbox = { sel, get scn() { return scn; }, get pair() { return pair; }, build, startRun, stopRun, refresh, SEVERITY };
+})();
+</script>
+</body>
+</html>
