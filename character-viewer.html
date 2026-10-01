@@ -152,7 +152,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="starlight-engine.js"></script>
+<script src="starlight-engine.js?v=case-1"></script>
 <script>
 (function () {
 'use strict';
@@ -718,15 +718,17 @@ document.getElementById('sc-on').onclick = () => {
   const b = document.createElement('button');
   b.textContent = label; b.dataset.pos = id;
   b.onclick = () => {
-    if (sc.position === id) return;
+    if (sc.position === id || !POSITIONS_OK) return;
     sc.position = id;
     if (sc.on) buildScene();
     refreshPositions();
   };
   document.getElementById('sc-position').appendChild(b);
 });
+// A browser holding an older cached starlight-engine.js would silently ignore the position.
+const POSITIONS_OK = !!S.POSITIONS;
 function refreshPositions() {
-  document.querySelectorAll('#sc-position button').forEach(b => b.classList.toggle('on', b.dataset.pos === sc.position));
+  document.querySelectorAll('#sc-position button').forEach(b => { b.classList.toggle('on', b.dataset.pos === sc.position); if (!POSITIONS_OK && b.dataset.pos !== 'lap') { b.disabled = true; b.title = 'starlight-engine.js is out of date: reload without the cache (Ctrl+Shift+R)'; } });
   // The paddle is lap-only (see IMPLEMENTS); fall back to the hand when it can't be used.
   if (sc.position === 'case' && S.IMPLEMENTS[sc.implement].lapOnly) { sc.implement = 'hand'; if (scn) scn.setImplement('hand'); }
   document.querySelectorAll('#sc-implements button').forEach(b => { b.disabled = sc.position === 'case' && !!S.IMPLEMENTS[b.dataset.impl].lapOnly; });
