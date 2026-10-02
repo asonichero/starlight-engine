@@ -2364,7 +2364,7 @@ function clothCushion(ch) {
 // ════════════════════════════════════════════════════════════════
 const PAIN = {
   // base: pain of a full-strength smack at standard speed; sting: the share that is sharp (fades fast).
-  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.5, sting: 0.65 }, rod: { base: 7.5, sting: 0.4 }, paddle: { base: 3.0, sting: 0.3 } },
+  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.5, sting: 0.65 }, rod: { base: 3.8, sting: 0.4 }, paddle: { base: 1.65, sting: 0.3 } },
   TAU_STING: 3.0, TAU_ACHE: 120,         // seconds for the sting and the ache to fall by 1/e, at resilience 0.5
   RESIST: 0.5,                          // resilience takes up to this share off every smack
   SPEED_EXP: 1.0,                        // pain ∝ speed ^ this
