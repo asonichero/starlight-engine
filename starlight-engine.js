@@ -1,5 +1,5 @@
-// Starlight engine — character models, the discipline scene and the dance library.
-// Shared by character-viewer.html and starlight-game.html. Needs three.js r128.
+// Fairy Shoe engine (forked from the Starlight engine) — character models and the discipline scene.
+// Shared by character-viewer.html and fairy-shoe.html. Needs three.js r128.
 // Everything is exposed on window.Starlight.
 (function (global) {
 'use strict';
@@ -31,109 +31,141 @@
 // worn, innermost first; `look` is the one a build starts in. Every look starts
 // from the full underwear base layer, and the clothes go over it.
 const PRESETS = {
-  aya: {
-    name: 'Aya', build: 'female', height: 172, legs: 1.02, shoulders: 38,
-    bust: 86, underbust: 72, waist: 63, hip: 100.5,
-    neck: 31, arm: 25, forearm: 22, wrist: 14.5,
-    thigh: 52, knee: 34, calf: 33, ankle: 20.5, cup: 3, glutes: 1.32, head: 1.0,
-    eye: 1.1, eyeHeight: -0.1, brow: 0.35, bridge: 0.81, hump: 0.2, tipTilt: -1, noseWidth: 0.92, lips: 0.81, mouth: 1.01, youth: 0.25, cheeks: 0.82,
-    // Watchful composure: alert, level, still. Lids a touch lifted (eyes ahead of the
-    // room), brows level, mouth corners exactly level; few eye movements, and she holds
-    // her gaze; blinks slowly.
-    expr: { browInner: -0.15, browOuter: 0.05, mouthL: 0.15, mouthR: 0.05, saccade: 0.12, contact: 0.8, blink: 0.6 },
-    // Her versions of the moods (offsets from her resting expression; Open is the shared one).
-    moods: {
-      effort:    { browInner: 0.05, browFurrow: 0.6, lidUpper: -0.35, squint: 0.6, mouthL: -0.3, mouthR: -0.3, teeth: 0.9 },
-      enjoyment: { browOuter: 0.1, lidUpper: 0.5, squint: 0.3, mouthL: 0.75, mouthR: 0.75, teeth: 0.7, mouthOpen: 0.05 },
-    },
-    skin: 0xe9c6a5,
-    outfit: { hair: 0x1a120c, hairStyle: 'ponytail', scrunchie: 0xf4f2ee, bobbles: [0x0c0c0e] },
+  // All characters are adults. The six residents are grown-up versions of the fairy-tale
+  // figures they are named for, long after (or in place of) the events they're known for.
+  // 'keeper' is the player's own body in the correction scene.
+  red: {
+    name: 'Red', build: 'female', height: 165, legs: 1.03, shoulders: 38,
+    bust: 88, underbust: 71, waist: 66, hip: 96,
+    neck: 29, arm: 26, forearm: 21, wrist: 14,
+    thigh: 53, knee: 34, calf: 34, ankle: 20, cup: 3, glutes: 1.3, head: 1.0,
+    eye: 1.1, brow: 0.3, lips: 0.9, youth: 0.1, cheeks: 0.9,
+    expr: { browInner: 0.1, mouthL: 0.1, mouthR: 0.0, saccade: 0.5, contact: 0.5, blink: 1.0 },
+    skin: 0xe6bfa0,
+    outfit: { hair: 0x7a2418, hairStyle: 'ponytail', scrunchie: 0xa3202b, bobbles: [0x7a1a1a] },
     wardrobe: {
-      bra:    { kind: 'bra', name: 'Black bralette', color: 0x141418, style: 'bralette' },
-      briefs: { kind: 'briefs', name: 'Black thong', color: 0x141418, rise: 0.25, riseBack: 1.0, back: 'thong', thong: 0.005 },
-      bottom: { kind: 'bottom', name: 'Leggings', color: 0x18181e, legLen: 2.0, lowerTo: 'calf' },
-      top:    { kind: 'top', name: 'Crop top', color: 0x1c1c22, from: 'underbust', sleeves: 0 },
-      shoes:  { kind: 'shoes', name: 'Trainers', color: 0xf0f0f0 },
+      bra:    { kind: 'bra', name: 'Plain bra', color: 15328476, style: 'classic' },
+      briefs: { kind: 'briefs', name: 'Cotton briefs', color: 15328476, rise: 0.5, side: 0.8, back: 'brief', backCurve: 0.8 },
+      bottom: { kind: 'bottom', name: 'Work trousers', color: 3813424, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Hooded jersey', color: 10690603, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x2a1d18 },
     },
-    looks: { Underwear: ['bra', 'briefs'], Rehearsal: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
-    look: 'Rehearsal',
+    looks: { Underwear: ['bra', 'briefs'], House: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
   },
-  rin: {
-    name: 'Rin', build: 'female', height: 163, legs: 1.05, shoulders: 37,
-    bust: 75.5, underbust: 68, waist: 62.5, hip: 87.5,
-    neck: 26, arm: 23, forearm: 19, wrist: 13.5,
-    thigh: 38, knee: 28, calf: 26, ankle: 19.5, cup: 2, glutes: 1.4, head: 1.04,
-    eye: 1.15, brow: 0.65, nose: 1.38, hump: 0.2, tipTilt: 1, lips: 0.6, mouth: 0.8, mouthHeight: -0.35, youth: 0.7, cheeks: 0.7, jaw: 0.87, chin: 1.06,
-    // Quiet preoccupation: the faintest concentration furrow, gaze a little lowered and
-    // inward, eyes that move more than the rest of her face (frequent, wide, not
-    // returning to anyone for long); corners of the mouth fractionally down.
-    expr: { browFurrow: 0.35, browInner: 0.55, gazeY: -0.15, lidUpper: -0.2, mouthL: -0.05, mouthR: -0.08, saccade: 0.9, contact: 0.25, blink: 1.2 },
-    // Her enjoyment: a closed-mouth smile, the furrow easing (Effort and Open are shared).
-    moods: {
-      enjoyment: { browOuter: 0.1, browFurrow: -0.1, squint: 0.45, mouthL: 0.75, mouthR: 0.75, teeth: 0 },
-    },
-    skin: 0xe9c6a5,
-    outfit: { hair: 0x14100c, hairStyle: 'long' },
+  goldilocks: {
+    name: 'Goldilocks', build: 'female', height: 168, legs: 1.03, shoulders: 38,
+    bust: 90, underbust: 72, waist: 67, hip: 99,
+    neck: 29, arm: 26, forearm: 21, wrist: 14,
+    thigh: 54, knee: 35, calf: 34, ankle: 20, cup: 4, glutes: 1.35, head: 1.0,
+    eye: 1.05, brow: 0.1, lips: 1.0, youth: 0.05, cheeks: 1.0,
+    expr: { browOuter: 0.15, mouthL: 0.05, mouthR: 0.05, lidUpper: -0.1, saccade: 0.4, contact: 0.7, blink: 0.9 },
+    skin: 0xf0d0b6,
+    outfit: { hair: 0xd2a85a, hairStyle: 'long' },
     wardrobe: {
-      bra:    { kind: 'bra', name: 'White bra', color: 0xf0eee9, style: 'classic' },
-      briefs: { kind: 'briefs', name: 'White cotton briefs', color: 0xf0eee9, rise: 0.5, side: 0.9, back: 'brief', backCurve: 1 },
-      bottom: { kind: 'bottom', name: 'Shorts', color: 0x3b4f6e, legLen: 0.52 },
-      top:    { kind: 'top', name: 'Hoodie', color: 0x9a9aa4, from: 'hip', sleeves: 2 },
-      shoes:  { kind: 'shoes', name: 'Trainers', color: 0xe8e8e8 },
+      bra:    { kind: 'bra', name: 'Plain bra', color: 15789284, style: 'classic' },
+      briefs: { kind: 'briefs', name: 'Cotton briefs', color: 15789284, rise: 0.5, side: 0.8, back: 'brief', backCurve: 0.8 },
+      bottom: { kind: 'bottom', name: 'Wool trousers', color: 6969924, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Linen blouse', color: 15260864, from: 'hip', sleeves: 1 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x3a2c20 },
     },
-    looks: { Underwear: ['bra', 'briefs'], Rehearsal: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
-    look: 'Rehearsal',
+    looks: { Underwear: ['bra', 'briefs'], House: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
   },
-  kiko: {
-    name: 'Kiko', build: 'female', height: 158, legs: 1.04, shoulders: 35,
-    bust: 86, underbust: 60, waist: 64.5, hip: 93.5,
-    neck: 26, arm: 30, forearm: 21, wrist: 14,
-    thigh: 49.5, knee: 32.5, calf: 27.5, ankle: 20, cup: 4, glutes: 1.4, head: 1.1,
-    eye: 1.3, eyeGap: 1.1, eyeHeight: -1, brow: 0.7, hump: -1, tipTilt: -1, noseWidth: 1.15, mouthHeight: -0.4, youth: 0.6, jaw: 0.87, chin: 1.05,
-    // Asymmetric readiness: one corner of the mouth cocked higher (a quip in reserve),
-    // eyes open and bright, brows lifted a little and one higher; quick eye movements
-    // that keep snapping back to you (eye contact held a beat too long).
-    expr: { mouthL: 0.6, mouthR: 0.25, lidUpper: 0.5, browInner: 0.2, browOuter: 0.25, browAsym: 0.2, saccade: 0.55, contact: 0.85, blink: 1.1 },
-    // Her enjoyment: a full, open grin, eyes wide rather than crinkled (Effort and Open are shared).
-    moods: {
-      enjoyment: { browOuter: 0.1, lidUpper: 0.5, squint: 0, mouthL: 0.4, mouthR: 0.75, teeth: 1, mouthOpen: 0.2 },
-    },
-    skin: 0xe9c6a5,
-    outfit: { hair: 0x120e08, hairStyle: 'buns', bobbles: [0x2c5fcf, 0xe86aa0], clips: [0xe86aa0, 0x2c5fcf] },
+  rapunzel: {
+    name: 'Rapunzel', build: 'female', height: 175, legs: 1.04, shoulders: 37,
+    bust: 84, underbust: 69, waist: 63, hip: 92,
+    neck: 28, arm: 24, forearm: 20, wrist: 13.5,
+    thigh: 50, knee: 33, calf: 33, ankle: 19.5, cup: 3, glutes: 1.25, head: 0.98,
+    eye: 1.15, brow: 0.5, lips: 0.8, youth: 0.1, cheeks: 0.8,
+    expr: { gazeY: -0.1, browInner: 0.35, mouthL: -0.05, mouthR: -0.05, saccade: 0.8, contact: 0.3, blink: 1.1 },
+    skin: 0xeccbb0,
+    outfit: { hair: 0xe3bd5c, hairStyle: 'long' },
     wardrobe: {
-      bra:    { kind: 'bra', name: 'Navy support bra', color: 0x1d2b4c, style: 'sports' },
-      briefs: { kind: 'briefs', name: 'Navy hipster shorts', color: 0x1d2b4c, rise: 0.15, side: 0.55, back: 'brief', backCurve: 0.45 },
-      bottom: { kind: 'bottom', name: 'Shorts', color: 0xe86aa0, legLen: 0.52 },
-      skirt:  { kind: 'skirt', name: 'Skirt', color: 0x2c5fcf, above: 0.01, length: 0.18, flare: 0.025 },
-      top:    { kind: 'top', name: 'Top', color: 0x1a7fe8, from: 'waist', sleeves: 2 },
-      shoes:  { kind: 'shoes', name: 'Trainers', color: 0x3a7ae0 },
+      bra:    { kind: 'bra', name: 'Plain bra', color: 15130858, style: 'classic' },
+      briefs: { kind: 'briefs', name: 'Cotton briefs', color: 15130858, rise: 0.5, side: 0.8, back: 'brief', backCurve: 0.8 },
+      bottom: { kind: 'bottom', name: 'Dark trousers', color: 3025462, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Plain smock', color: 9206438, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x3a2c36 },
     },
-    looks: { Underwear: ['bra', 'briefs'], Rehearsal: ['bra', 'briefs', 'bottom', 'skirt', 'top', 'shoes'] },
-    look: 'Rehearsal',
+    looks: { Underwear: ['bra', 'briefs'], House: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
   },
-  kenji: {
-    name: 'Kenji', build: 'male', height: 181.5, legs: 1.02, shoulders: 45,
+  snowwhite: {
+    name: 'Snow White', build: 'female', height: 163, legs: 1.02, shoulders: 36,
+    bust: 86, underbust: 69, waist: 64, hip: 94,
+    neck: 27, arm: 25, forearm: 20, wrist: 13.5,
+    thigh: 51, knee: 33, calf: 32, ankle: 19.5, cup: 3, glutes: 1.3, head: 1.0,
+    eye: 1.2, brow: 0.2, lips: 1.1, youth: 0.1, cheeks: 0.9,
+    expr: { browInner: 0.3, mouthL: 0.15, mouthR: 0.15, lidUpper: 0.2, saccade: 0.6, contact: 0.8, blink: 1.0 },
+    skin: 0xf3dccb,
+    outfit: { hair: 0x0e0a0a, hairStyle: 'buns', bobbles: [0xa3202b], clips: [0xa3202b, 0x2c3a6a] },
+    wardrobe: {
+      bra:    { kind: 'bra', name: 'Plain bra', color: 15920872, style: 'classic' },
+      briefs: { kind: 'briefs', name: 'Cotton briefs', color: 15920872, rise: 0.5, side: 0.8, back: 'brief', backCurve: 0.8 },
+      bottom: { kind: 'bottom', name: 'Dark trousers', color: 2368556, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Close-fit jumper', color: 2898538, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x241a16 },
+    },
+    looks: { Underwear: ['bra', 'briefs'], House: ['bra', 'briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
+  },
+  jack: {
+    name: 'Jack', build: 'male', height: 178, legs: 1.02, shoulders: 44,
+    bust: 98, underbust: 92, waist: 82, hip: 96,
+    neck: 38, arm: 33, forearm: 27, wrist: 17,
+    thigh: 55, knee: 38, calf: 37, ankle: 23, glutes: 1.4, head: 1.0,
+    eye: 1.1, brow: 0.15, nose: 1.1, lips: 0.9, mouth: 1.1,
+    expr: { mouthL: 0.3, mouthR: 0.15, lidUpper: 0.2, browOuter: 0.15, saccade: 0.6, contact: 0.8, blink: 1.0 },
+    skin: 0xd9aa82,
+    outfit: { hair: 0x8a6a3a, hairStyle: 'short' },
+    wardrobe: {
+      briefs: { kind: 'briefs', name: 'Cotton trunks', color: 0x3a3d44, rise: 0.5, leg: 0.1 },
+      bottom: { kind: 'bottom', name: 'Canvas trousers', color: 4866098, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Work shirt', color: 5929546, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x2a211a },
+    },
+    looks: { Underwear: ['briefs'], House: ['briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
+  },
+  corren: {
+    name: 'Corren', build: 'male', height: 184, legs: 1.02, shoulders: 46,
+    bust: 102, underbust: 95, waist: 84, hip: 97,
+    neck: 39, arm: 34, forearm: 28, wrist: 17.5,
+    thigh: 56, knee: 39, calf: 38, ankle: 23.5, glutes: 1.4, head: 1.0,
+    eye: 1.05, eyeGap: 1.0, brow: 0.2, nose: 1.2, bridge: 1.4, hump: 0.3, lips: 0.85, mouth: 1.1,
+    expr: { gazeX: 0.1, squint: 0.2, lidUpper: -0.1, browInner: 0.0, mouthL: 0.0, mouthR: 0.0, saccade: 0.2, contact: 0.7, blink: 0.8 },
+    skin: 0xb98760,
+    outfit: { hair: 0x1a120c, hairStyle: 'short' },
+    wardrobe: {
+      briefs: { kind: 'briefs', name: 'Cotton trunks', color: 0x3a3d44, rise: 0.5, leg: 0.1 },
+      bottom: { kind: 'bottom', name: 'Dark trousers', color: 2763312, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Heavy cotton shirt', color: 8022616, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x2a211a },
+    },
+    looks: { Underwear: ['briefs'], House: ['briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
+  },
+  keeper: {
+    name: 'Keeper', build: 'male', height: 181.5, legs: 1.02, shoulders: 45,
     bust: 96, underbust: 90, waist: 80, hip: 94,
     neck: 38, arm: 32.5, forearm: 27, wrist: 17,
     thigh: 54, knee: 38, calf: 37, ankle: 23, glutes: 1.4, head: 1.0,
     eye: 1.14, eyeGap: 1.01, brow: 0.1, nose: 1.18, bridge: 1.5, hump: 0.35, lips: 0.85, mouth: 1.15,
-    // Steady absorption: listening to something you can't hear. Gaze resting slightly
-    // off to one side and up; a habitual tension round the eyes (lower lids raised,
-    // upper a touch heavy, not a squint); mouth neither smiling nor serious.
     expr: { gazeX: 0.3, gazeY: 0.12, squint: 0.35, lidUpper: -0.15, browInner: 0.05, mouthL: 0.05, mouthR: 0.05, saccade: 0.25, contact: 0.6, blink: 0.9 },
     skin: 0xe9c6a5,
-    outfit: { hair: 0x120e0a, hairStyle: 'short' },
+    outfit: { hair: 0x3a2a1c, hairStyle: 'short' },
     wardrobe: {
-      briefs: { kind: 'briefs', name: 'Grey trunks', color: 0x3a3d44, rise: 0.5, leg: 0.1 },
-      bottom: { kind: 'bottom', name: 'Trousers', color: 0x22252c, legLen: 2.0, lowerTo: 'ankle' },
-      top:    { kind: 'top', name: 'Sweatshirt', color: 0x3a4250, from: 'hip', sleeves: 2 },
-      shoes:  { kind: 'shoes', name: 'Shoes', color: 0x1a1a1a },
+      briefs: { kind: 'briefs', name: 'Cotton trunks', color: 0x3a3d44, rise: 0.5, leg: 0.1 },
+      bottom: { kind: 'bottom', name: 'Trousers', color: 2237740, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'Waistcoat shirt', color: 3818064, from: 'hip', sleeves: 2 },
+      shoes:  { kind: 'shoes', name: 'Boots', color: 0x2a211a },
     },
-    looks: { Underwear: ['briefs'], Rehearsal: ['briefs', 'bottom', 'top', 'shoes'] },
-    look: 'Rehearsal',
+    looks: { Underwear: ['briefs'], House: ['briefs', 'bottom', 'top', 'shoes'] },
+    look: 'House',
   },
 };
-const ORDER = ['aya', 'rin', 'kiko', 'kenji'];
+const ORDER = ['red', 'goldilocks', 'rapunzel', 'jack', 'corren', 'snowwhite', 'keeper'];
 // Face shape, as multipliers of each build's base face (1 = unchanged) except brow
 // hump, tipTilt, mouthHeight and eyeHeight (−1…1). A preset can set any of them; the rest take these defaults.
 // eye: eye size; eyeGap: spacing between the eyes.
@@ -2097,7 +2129,6 @@ function resetCharacter(ch, pose = 'Relaxed') {
   const u = ch.mesh.material.userData.uniforms;
   u.uPressAmt.value = 0; u.uPressAmt2.value = 0;
   ch.jig = null;
-  ch.dancer = null;
   ch.handsOnHead = false;
   ch.handsTogether = null;
   ch.lookAtCh = null;   // another character whose face this one looks toward
@@ -2116,8 +2147,8 @@ function disposeCharacter(ch) {
 }
 
 // ── Feet on the floor ──
-// A dancer's poses each set their own knee bends, and the body is lowered by a fixed
-// amount per move, so without help the feet land at different heights (a foot hanging
+// A pose sets its own knee bends, and the body may be lowered by a fixed
+// amount, so without help the feet land at different heights (a foot hanging
 // in the air, the other sunk into the floor). After the pose is applied, every foot
 // whose sole is within PLANT_MAX of the floor is planted: the body comes down only if
 // a straightened leg can't reach, then each planted leg is re-solved (two-bone IK,
@@ -2173,10 +2204,9 @@ function groundFeet(ch) {
 }
 
 // Per-frame animation for a character not being driven by a scene: ease the pose
-// toward its target, breathe, and blend any dance hand IK over the top.
+// toward its target and breathe.
 function animateCharacter(ch, dt, t, rate = 7) {
-  if (ch.dancer) ch.dancer.update(dt);
-  const a = 1 - Math.exp(-dt * (ch.dancer && ch.dancer.active ? 14 : rate));
+  const a = 1 - Math.exp(-dt * rate);
   for (const b of BONES) {
     ch.pose[b].slerp(ch.target[b], a);
     ch.bones[b].quaternion.copy(ch.pose[b]);
@@ -2184,8 +2214,6 @@ function animateCharacter(ch, dt, t, rate = 7) {
   const br = Math.sin(t * 1.6 + ch.spec.H * 10) * 0.012;
   ch.bones.spine2.rotateX(-br);
   ch.bones.neck.rotateX(br * 0.8);
-  if (ch.dancer) groundFeet(ch);
-  if (ch.dancer && ch.dancer.ik && ch.dancer.ikW > 0) { ch.group.updateMatrixWorld(true); danceIK(ch, ch.dancer.ik, ch.dancer.ikW); }
   if (ch.lookAtCh) { ch.group.updateMatrixWorld(true); lookAt(ch, ch.lookAtCh.bones.head.getWorldPosition(new THREE.Vector3()), 0.9); }
   if (ch.handsOnHead) { ch.group.updateMatrixWorld(true); handsOnHead(ch); }
   if (ch.handsTogether) { ch.group.updateMatrixWorld(true); handsTogether(ch, ch.handsTogether); }
@@ -3719,21 +3747,18 @@ const MARK_AT_KNEE = markHill(MARK_KNEE);
 const markStrength = n => n <= MARK_KNEE ? markHill(n)
   : Math.min(1, MARK_AT_KNEE + (1 - MARK_AT_KNEE) * Math.log(n / MARK_KNEE) / Math.log(MARK_FULL / MARK_KNEE));
 // Fading, two ways:
-//  - Dancing: each move performed keeps MARK_FADE_MOVE of the strength, so a full
-//    routine (MARK_ROUTINE moves) takes 100% down to MARK_AFTER_ROUTINE at any tempo.
+//  - Steps: fadeMarksBy(ch, keep) keeps a fixed share of the strength (the game calls it
+//    once per day).
 //  - Time: all the time (off stage too), proportionally, tuned so that over a typical
 //    cycle, MARK_CYCLE_MIN minutes from one correction to the same character's next,
-//    with its MARK_CYCLE_ROUTINES routines danced, 100% ends at MARK_AFTER_CYCLE.
-//    Time can never take more than that cycle's share since that side's last smack
-//    (MARK_TIME_FLOOR), so however long a player takes, a mark is at least
-//    MARK_AFTER_CYCLE by the next correction.
-// Set ch.marksHeld to pause both (the game holds marks steady through the finale).
+//    100% ends at 45%. Time can never take more than that cycle's share
+//    since that side's last smack (MARK_TIME_FLOOR), so however long a player takes, a
+//    mark is at least 45% by the next correction.
+// Set ch.marksHeld to pause both.
 // Smacks after some fading build on what's left: the remaining strength counts as the
 // number of smacks that would give it (markCount), plus one.
-const MARK_ROUTINE = 12, MARK_AFTER_ROUTINE = 0.55;
-const MARK_FADE_MOVE = Math.pow(MARK_AFTER_ROUTINE, 1 / MARK_ROUTINE);
-const MARK_CYCLE_MIN = 6, MARK_CYCLE_ROUTINES = 1, MARK_AFTER_CYCLE = 0.25;
-const MARK_TIME_FLOOR = MARK_AFTER_CYCLE / Math.pow(MARK_AFTER_ROUTINE, MARK_CYCLE_ROUTINES);   // ≈ 0.45
+const MARK_CYCLE_MIN = 6;
+const MARK_TIME_FLOOR = 0.45;
 const MARK_KEEP_PER_SEC = Math.pow(MARK_TIME_FLOOR, 1 / (MARK_CYCLE_MIN * 60));
 // The number of smacks that gives strength f (markStrength's inverse, for building on a faded mark).
 const markCount = f => f <= 0 ? 0 : f <= MARK_AT_KNEE ? MARK_HALF * Math.pow(f / (1 - f), 1 / MARK_POW)
@@ -3764,10 +3789,10 @@ function fadeMarks(ch, dt) {
   }
   applyMarks(ch);
 }
-// One dance move performed (see createDancer).
-function fadeMarksMove(ch) {
+// Fades both sides' marks by a fixed factor (the game fades marks as the days pass).
+function fadeMarksBy(ch, keep) {
   if (!ch.marks || ch.marksHeld) return;
-  for (const side of ['L', 'R']) { const m = ch.marks[side]; m.f *= MARK_FADE_MOVE; if (m.f < 0.005) { m.f = 0; m.n = 0; m.c = null; } }
+  for (const side of ['L', 'R']) { const m = ch.marks[side]; m.f *= keep; if (m.f < 0.005) { m.f = 0; m.n = 0; m.c = null; } }
   if (!ch.marks.L.f && !ch.marks.R.f) ch.marks = null;
   applyMarks(ch);
 }
@@ -3905,196 +3930,6 @@ function placeFingertips(ch, side) {
 // Shoulder-to-palm-centre reach of an arm.
 function armReach(ch, side) {
   return ch.bones['forearm' + side].position.length() + ch.bones['hand' + side].position.length() + ch.spec.H * 0.106 * 0.42;
-}
-
-// ════════════════════════════════════════════════════════════════
-// DANCE MOVES — each move is a prep pose (the wind-up, half a beat before)
-// and a hit pose (on the beat), layered over a relaxed base. Optional:
-// turn (body yaw, degrees, + = to the character's left), drop (hips lowered,
-// fraction of height), spin (extra full-body rotation during prep → hit).
-// "R" variants are generated by mirroring, so left/right always match.
-// Bone angle conventions as in POSES above.
-// ════════════════════════════════════════════════════════════════
-// Ready stance: arms loose off the body, feet hip-width, knees soft. Moves that leave
-// the legs alone keep this stance rather than locking straight.
-const DANCE_BASE = { upperArmL: [-4, 0, -34], upperArmR: [-4, 0, 34], forearmL: [-22, 0, 0], forearmR: [-22, 0, 0],
-  thighL: [-3, 0, -4], thighR: [-3, 0, 4], shinL: [6, 0, 0], shinR: [6, 0, 0] };
-// Arm building blocks (left arm; the right mirrors Z): Z −45 hangs the arm at the
-// side, Z +45 is out horizontal, Z +135 straight up. X swings the hanging arm
-// forward (−X), so [−90, 0, −45] points straight ahead, [−150, 0, −45] forward-up.
-const DANCE_SRC = {
-  'Extend & Turn L': {   // body turns; left arm high, right arm out behind, left leg extended back
-    prep: { thighL: [-15, 0, 0], thighR: [-15, 0, 0], shinL: [25, 0, 0], shinR: [25, 0, 0], spine1: [8, 0, 0],
-            upperArmL: [-45, 0, -40], upperArmR: [-45, 0, 40], forearmL: [-90, 0, 0], forearmR: [-90, 0, 0] },
-    prepDrop: 0.02,
-    hit: { pelvis: [0, 20, 0], spine2: [-6, 15, 0], neck: [0, 20, 0],
-           upperArmL: [0, 0, 115], forearmL: [0, 0, 0], upperArmR: [30, 0, -35], forearmR: [0, 0, 0],
-           thighL: [28, 0, 6], footL: [25, 0, 0] },
-    turn: 25,
-  },
-  'Step & Reach L': {  // step forward on the left, left arm reaching forward and up, right arm open low behind
-    prep: { thighR: [-10, 0, 0], shinR: [20, 0, 0], thighL: [-8, 0, 0], shinL: [12, 0, 0],
-            upperArmL: [25, 0, -40], forearmL: [-20, 0, 0], upperArmR: [-40, 0, 40], forearmR: [-60, 0, 0] },
-    prepDrop: 0.015,
-    hit: { thighL: [-38, 0, 0], shinL: [12, 0, 0], thighR: [16, 0, 0], shinR: [6, 0, 0], pelvis: [0, -10, 0], spine1: [-5, 0, 0],
-           upperArmL: [-130, 0, -45], forearmL: [-5, 0, 0], upperArmR: [35, 0, -20], forearmR: [-5, 0, 0], neck: [-12, 0, 0] },
-    hitDrop: 0.012,
-  },
-  'Sway & Sweep L': {    // side lean with both arms sweeping overhead to one side
-    prep: { pelvis: [0, 0, 6], spine1: [0, 0, -8], spine2: [0, 0, -6], thighR: [0, 0, -8],
-            upperArmL: [0, 0, -30], upperArmR: [0, 0, 60], forearmL: [-20, 0, 0], forearmR: [-20, 0, 0] },
-    hit: { pelvis: [0, 0, -8], spine1: [0, 0, 12], spine2: [0, 0, 10], neck: [0, 0, 8], thighL: [0, 0, 10],
-           upperArmL: [0, 0, 150], upperArmR: [0, 0, -110], forearmL: [-10, 0, 0], forearmR: [-10, 0, 0] },
-  },
-  'Cross-Step L': {    // left foot crosses in front; left arm swings across the body, right arm opens behind
-    prep: { thighL: [0, 0, 16], upperArmL: [0, 0, 20], upperArmR: [0, 0, -20], forearmL: [0, 0, 0], forearmR: [0, 0, 0] },
-    hit: { thighL: [-22, 0, -24], shinL: [15, 0, 0], thighR: [5, 0, 4], shinR: [18, 0, 0], pelvis: [0, 15, 0], spine2: [0, -20, 0],
-           upperArmL: [-68, 0, -54], forearmL: [-8, 0, 0], upperArmR: [30, 0, -40], forearmR: [-10, 0, 0], neck: [0, 10, 0] },
-    hitDrop: 0.025,
-  },
-  'Spin & Land': {     // full turn, landing low: knees bent, torso over the knees, arms low and open
-    prep: { upperArmL: [-60, 0, -45], upperArmR: [-60, 0, 45], forearmL: [-110, 0, 0], forearmR: [-110, 0, 0], spine2: [-5, 0, 0] },
-    hit: { thighL: [-50, 0, 10], thighR: [-20, 0, -8], shinL: [70, 0, 0], shinR: [45, 0, 0], footL: [-20, 0, 0], footR: [-15, 0, 0],
-           spine1: [16, 0, 0], spine2: [4, 0, 0], neck: [-6, 0, 0],
-           upperArmL: [-15, 0, 22], upperArmR: [-15, 0, -22], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0] },
-    hitDrop: 0.09, spin: 360,
-  },
-  'Arms Wide': {       // wide stance, arms straight out to the sides, chest lifted
-    prep: { upperArmL: [-60, 0, -45], upperArmR: [-60, 0, 45], forearmL: [-100, 0, 0], forearmR: [-100, 0, 0],
-            thighL: [-8, 0, 0], thighR: [-8, 0, 0], shinL: [15, 0, 0], shinR: [15, 0, 0], spine1: [8, 0, 0] },
-    prepDrop: 0.012,
-    hit: { upperArmL: [0, 0, 48], upperArmR: [0, 0, -48], forearmL: [0, 0, 0], forearmR: [0, 0, 0],
-           thighL: [0, 0, 14], thighR: [0, 0, -14], spine2: [-8, 0, 0], neck: [-10, 0, 0] },
-  },
-  'Final Bow': {       // bow from the hips, right hand settled in front of the abdomen, left arm out low
-    prep: { upperArmL: [0, 0, 20], upperArmR: [0, 0, -20], forearmL: [0, 0, 0], forearmR: [0, 0, 0], spine2: [-5, 0, 0] },
-    hit: { pelvis: [18, 0, 0], thighL: [-18, 0, 0], thighR: [-6, 0, 0], spine1: [20, 0, 0], spine2: [14, 0, 0], neck: [8, 0, 0],
-           upperArmR: [-40, 0, 30], forearmR: [-90, 0, 0], upperArmL: [14, 0, -38], forearmL: [-15, 0, 0] },
-    // Right palm placed by IK just in front of the abdomen, fingers across the body,
-    // elbow forward and out so the forearm lies parallel to the front of the torso.
-    ikHit: { side: 'R', gap: 0.012, across: -0.02, pole: [-0.35, -0.05, 0.35] },
-  },
-  'Kick L': {          // knee up on the prep, left leg kicks out forward, arms open for balance
-    prep: { thighL: [-65, 0, 0], shinL: [95, 0, 0], thighR: [-5, 0, 0], shinR: [12, 0, 0],
-            upperArmL: [-40, 0, -40], forearmL: [-90, 0, 0], upperArmR: [-40, 0, 40], forearmR: [-90, 0, 0] },
-    hit: { thighL: [-80, 0, 0], shinL: [0, 0, 0], footL: [30, 0, 0], thighR: [4, 0, 0], shinR: [10, 0, 0], spine1: [-10, 0, 0],
-           upperArmL: [0, 0, 40], upperArmR: [0, 0, -40], forearmL: [0, 0, 0], forearmR: [0, 0, 0] },
-    hitDrop: 0.01,
-  },
-  'Floor Touch L': {   // right knee bends deep, left leg straight out to the side, left hand to the floor
-    prep: { thighL: [0, 0, 12], thighR: [0, 0, -12], upperArmL: [0, 0, 60], upperArmR: [0, 0, -60], forearmL: [0, 0, 0], forearmR: [0, 0, 0] },
-    hit: { thighR: [-70, 0, -12], shinR: [110, 0, 0], footR: [-30, 0, 0], thighL: [0, 0, 40], shinL: [0, 0, 0], footL: [0, 0, -15],
-           pelvis: [0, 0, 10], spine1: [42, 0, 18], spine2: [18, 0, 10],
-           upperArmL: [-70, 0, -48], forearmL: [0, 0, 0], upperArmR: [0, 0, -110], forearmR: [0, 0, 0], neck: [-10, 0, 0] },
-    hitDrop: 0.2,
-  },
-  'Forward Reach L': { // left arm straight ahead, right arm drawn back, shoulders turned into the reach
-    prep: { upperArmL: [30, 0, -40], forearmL: [-90, 0, 0], upperArmR: [-20, 0, 40], forearmR: [-20, 0, 0], spine2: [0, 10, 0] },
-    hit: { upperArmL: [-90, 0, -45], forearmL: [0, 0, 0], upperArmR: [40, 0, 40], forearmR: [-75, 0, 0], spine2: [0, -18, 0],
-           spine1: [6, 0, 0], thighL: [-12, 0, 0], shinL: [12, 0, 0], shinR: [12, 0, 0], neck: [0, 10, 0] },
-    hitDrop: 0.015,
-  },
-  'Bend & Reach': {    // fold forward at the hips, both arms reaching forward
-    prep: { spine2: [-10, 0, 0], upperArmL: [0, 0, 120], upperArmR: [0, 0, -120], forearmL: [0, 0, 0], forearmR: [0, 0, 0] },
-    hit: { pelvis: [35, 0, 0], thighL: [-35, 0, 0], thighR: [-35, 0, 0], shinL: [15, 0, 0], shinR: [15, 0, 0], footL: [-5, 0, 0], footR: [-5, 0, 0],
-           spine1: [25, 0, 0], spine2: [10, 0, 0], neck: [-25, 0, 0],
-           upperArmL: [-155, 0, -45], upperArmR: [-155, 0, 45], forearmL: [0, 0, 0], forearmR: [0, 0, 0] },
-    hitDrop: 0.02,
-  },
-};
-const mirrorMove = m => ({ ...m, prep: mirrorPose(m.prep), hit: mirrorPose(m.hit),
-  turn: -(m.turn || 0), prepTurn: -(m.prepTurn || 0), spin: -(m.spin || 0) });
-// Every move with a left/right bias gets a mirrored R version.
-const SIDED = ['Extend & Turn', 'Step & Reach', 'Sway & Sweep', 'Cross-Step', 'Kick', 'Floor Touch', 'Forward Reach'];
-const DANCE_MOVES = {};
-for (const [name, m] of Object.entries(DANCE_SRC)) {
-  DANCE_MOVES[name] = m;
-  const base = name.replace(/ L$/, '');
-  if (SIDED.includes(base) && name.endsWith(' L')) DANCE_MOVES[base + ' R'] = mirrorMove(m);
-}
-DANCE_MOVES['Hold the Pose'] = null;          // repeats the previous move's hit
-// Keep the bow last.
-const bow = DANCE_MOVES['Final Bow']; delete DANCE_MOVES['Final Bow']; DANCE_MOVES['Final Bow'] = bow;
-// A missed move: off-balance, shoulders dropped, arms loose. Not part of the library.
-const STUMBLE = { hit: { spine1: [14, 0, 5], spine2: [6, 0, 3], neck: [16, 0, -6], pelvis: [0, 6, -3],
-  upperArmL: [-10, 0, -28], upperArmR: [-20, 0, 50], forearmL: [-35, 0, 0], forearmR: [-25, 0, 0],
-  thighL: [-14, 0, -2], shinL: [22, 0, 0], thighR: [4, 0, 4], shinR: [8, 0, 0] }, hitDrop: 0.02 };
-// The other side of a sided move ('Kick L' ↔ 'Kick R'), or null.
-const mirrorName = name => /^(.*) ([LR])$/.test(name) && SIDED.includes(name.slice(0, -2)) ? name.slice(0, -1) + (name.endsWith('L') ? 'R' : 'L') : null;
-
-// Per-character playback of the library. prep()/hit() apply a move immediately;
-// play(keys) runs a timed list of {t, move, kind: 'prep'|'hit', dur}.
-// The group's yaw and height are offset from `baseRY` / `baseY`.
-function createDancer(ch) {
-  const D = { active: false, t: 0, keys: [], next: 0, yaw: 0, yawFrom: 0, yawTo: 0, yawT0: 0, yawDur: 0.3, spin: 0,
-    drop: 0, dropTo: 0, last: null, ik: null, ikW: 0, baseRY: ch.group.rotation.y, baseY: ch.group.position.y, current: null };
-  const apply = (move, kind, dur) => {
-    const name = move === 'Hold the Pose' ? D.last : move;
-    const m = name === 'Stumble' ? STUMBLE : DANCE_MOVES[name];
-    D.active = true;
-    D.current = { move, kind };
-    if (kind === 'hit') fadeMarksMove(ch);   // every move danced counts, holds and stumbles included
-    if (!m) return;
-    if (move === 'Hold the Pose') {
-      // Back to (or stay in) the last move's hit pose, without replaying its turn or spin.
-      const target = poseQuats(DANCE_BASE, m.hit);
-      for (const b of BONES) ch.target[b] = target[b].clone();
-      D.dropTo = m.hitDrop || 0; D.ik = m.ikHit || null;
-      return;
-    }
-    const target = poseQuats(DANCE_BASE, m[kind] || m.hit);
-    for (const b of BONES) ch.target[b] = target[b].clone();
-    D.yawFrom = D.yaw; D.yawTo = (kind === 'hit' ? m.turn : m.prepTurn) || 0;
-    D.yawT0 = D.t; D.yawDur = dur; D.spin = kind === 'hit' ? (m.spin || 0) : 0;
-    if (D.spin) D.yawFrom -= D.spin;   // the spin eases from −spin to 0: a full turn ending facing front
-    D.dropTo = (kind === 'hit' ? m.hitDrop : m.prepDrop) || 0;
-    D.ik = kind === 'hit' && m.ikHit ? m.ikHit : null; D.ikW = D.ik ? D.ikW : 0;
-    if (kind === 'hit' && name !== 'Stumble') D.last = name;
-  };
-  D.prep = (move, dur = 0.25) => apply(move, 'prep', dur);
-  D.hit = (move, dur = 0.3) => apply(move, 'hit', dur);
-  D.stumble = (dur = 0.3) => apply('Stumble', 'hit', dur);
-  D.rest = () => { D.active = false; D.ik = null; D.yawFrom = D.yaw; D.yawTo = 0; D.yawT0 = D.t; D.yawDur = 0.4; D.spin = 0; D.dropTo = 0;
-    const t = poseQuats(DANCE_BASE); for (const b of BONES) ch.target[b] = t[b].clone(); };
-  D.play = keys => { D.t = 0; D.keys = keys; D.next = 0; D.active = true; };
-  D.update = dt => {
-    D.t += dt;
-    while (D.next < D.keys.length && D.t >= D.keys[D.next].t) { const k = D.keys[D.next++]; apply(k.move, k.kind, k.dur); }
-    const p = clamp((D.t - D.yawT0) / D.yawDur, 0, 1), e = p * p * (3 - 2 * p);
-    D.yaw = lerp(D.yawFrom, D.yawTo, e);
-    D.drop += (D.dropTo - D.drop) * (1 - Math.exp(-dt * 12));
-    D.ikW = D.ik ? Math.min(1, (D.ikW || 0) + dt * 5) : 0;
-    ch.group.rotation.y = D.baseRY + D.yaw * Math.PI / 180;
-    ch.group.position.y = D.baseY - D.drop * ch.spec.H;
-  };
-  D.stop = () => { D.rest(); D.yaw = D.yawTo = D.drop = D.dropTo = 0; D.keys = []; ch.group.rotation.y = D.baseRY; ch.group.position.y = D.baseY; };
-  ch.dancer = D;
-  const t = poseQuats(DANCE_BASE); for (const b of BONES) ch.target[b] = t[b].clone();
-  return D;
-}
-// Belly front (rest space, z) at waist height for a character, cached.
-function bellyFront(ch) {
-  if (ch.bellyZ === undefined) {
-    const p = [0, ch.spec.Y.waist, 0];
-    while (field(ch.spec, p) < 0 && p[2] < 0.4) p[2] += 0.001;
-    ch.bellyZ = p[2];
-  }
-  return ch.bellyZ;
-}
-// Blend a hand IK over the pose for the current move (see ikHit on moves).
-function danceIK(ch, spec, w) {
-  const side = spec.side, sp = ch.bones.spine1;
-  const q = sp.getWorldQuaternion(new THREE.Quaternion());
-  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q), left = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
-  const J = ch.spec.J, rF = ch.spec.m.forearm / 100 / (2 * Math.PI);
-  const local = new THREE.Vector3(spec.across * ch.spec.H / 1.7, 0.012 * ch.spec.H, bellyFront(ch) - J.spine1[2] + rF + spec.gap);
-  const target = local.applyMatrix4(sp.matrixWorld);
-  const sh = ch.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
-  const pole = sh.clone().add(new THREE.Vector3(...spec.pole).applyQuaternion(q));
-  const bones = ['upperArm', 'forearm', 'hand'].map(n => ch.bones[n + side]);
-  const before = bones.map(b => b.quaternion.clone());
-  armIK(ch, side, target, pole, fwd, side === 'R' ? left : left.clone().negate());
-  bones.forEach((b, i) => b.quaternion.copy(before[i].slerp(b.quaternion.clone(), w)));
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -4911,12 +4746,11 @@ function bustContact(ch, everyone) {
 
 global.Starlight = {
   PRESETS, ORDER, FACE_DEFAULTS, faceParams, BONES, POSES, clone, SKIN, BRA_STYLES, lookLayers, dress, setSkin,
-  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
+  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksBy, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
   createDisciplineScene, IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
-  DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
 };
 })(window);

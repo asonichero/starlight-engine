@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Fairy Shoe</title>
+<style>
+  :root { --bg: #17130f; --panel: rgba(28,22,17,0.95); --line: #3d3228; --ink: #eee5d8; --dim: #a39684; --gold: #d2a64e; --red: #b8503f; --green: #7aa563; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
+  #view { position: fixed; inset: 0 400px 0 0; }
+  #hud { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; box-sizing: border-box; padding: 16px 18px 70px; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: 0.02em; font-weight: normal; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin: 18px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; font-weight: normal; }
+  .sub { color: var(--dim); font-size: 12px; }
+  button { font: inherit; font-size: 13px; background: #3a2e23; color: var(--ink); border: 1px solid #5a4a38; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #4a3b2c; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.on { background: #6b5322; border-color: var(--gold); }
+  button.go { background: #4f6a3c; border-color: #7aa563; }
+  .row { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 8px; }
+  .card { border: 1px solid var(--line); background: #231b14; border-radius: 6px; padding: 9px 11px; margin-bottom: 8px; }
+  .card.sel { border-color: var(--gold); }
+  .card.drop { border-color: var(--green); background: #26301f; }
+  .card .t { font-size: 15px; } .card .s { color: var(--dim); font-size: 12px; }
+  .chip { display: inline-block; padding: 3px 9px; margin: 2px 4px 2px 0; border: 1px solid #6a5842; border-radius: 12px; background: #34281d; cursor: grab; font-size: 13px; }
+  .pips { display: flex; align-items: center; gap: 8px; margin: 2px 0; font-size: 12px; }
+  .pips .n { width: 86px; color: var(--dim); }
+  .pip { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #7a6a55; display: inline-block; margin-right: 3px; }
+  .pip.f { background: var(--gold); border-color: var(--gold); }
+  .delta { font-size: 11px; margin-left: 4px; } .up { color: var(--green); } .dn { color: var(--red); }
+  .beh { border-left: 3px solid var(--gold); padding: 4px 0 4px 10px; margin: 8px 0; }
+  .beh.event { border-color: var(--red); } .beh.trap { border-style: dashed; }
+  #log { position: fixed; left: 14px; bottom: 10px; max-width: calc(100% - 440px); font-size: 12px; color: var(--dim); pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #banner { position: fixed; left: 0; top: 0; right: 400px; padding: 14px 20px; background: rgba(40,30,20,0.9); border-bottom: 1px solid var(--gold); display: none; text-align: center; font-size: 16px; }
+  #loading { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; z-index: 5; }
+  .meter { font-size: 13px; padding: 6px 10px; background: #1c150f; border: 1px solid var(--line); border-radius: 4px; margin: 6px 0; }
+  .meter b { color: var(--gold); font-weight: normal; }
+  @media (max-width: 800px) { #view { inset: 0 0 50% 0; } #hud { width: 100%; top: 50%; border-left: 0; border-top: 1px solid var(--line); } #log, #banner { right: 0; max-width: none; } }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="banner"></div>
+<div id="log"></div>
+<div id="hud"></div>
+<div id="loading"><h1>The Fairy Shoe</h1><div class="sub" id="load-msg">Preparing the house…</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="starlight-engine.js"></script>
+<script src="fairy-shoe-rules.js"></script>
+<script>
+(function () {
+'use strict';
+// The Fairy Shoe — a household of adults who chose to be here. Chores in the morning, the
+// evening's notes on each resident, and corrections the player runs live in the scene: every
+// implement, clothing layer and kind of aftercare is always available, and the player decides
+// when a correction begins and when it ends. There are no cards, decks or hands.
+const S = window.Starlight, F = window.FairyShoe;
+const $ = id => document.getElementById(id);
+const hud = $('hud');
+const tick = () => new Promise(r => setTimeout(r, 20));
+
+// ── Renderer ──
+const viewEl = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(viewEl.clientWidth, viewEl.clientHeight);
+renderer.shadowMap.enabled = true; renderer.localClippingEnabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+viewEl.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1510);
+const camera = new THREE.PerspectiveCamera(35, viewEl.clientWidth / viewEl.clientHeight, 0.05, 50);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xf6e9d6, 0x2a2018, 0.6));
+const key = new THREE.DirectionalLight(0xffe9c8, 1.25);
+key.position.set(2, 4, 3); key.castShadow = true; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.012; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -0.5, near: 0.5, far: 12 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xffc890, 0.45); rim.position.set(-2.5, 2.5, -3); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(5, 64), new THREE.MeshStandardMaterial({ color: S.lin(0x3a2c20), roughness: 0.95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+function resize() { const w = viewEl.clientWidth, h = viewEl.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+window.addEventListener('resize', resize);
+
+const SHOT = { house: { pos: [0, 1.3, 4.7], tgt: [0, 0.9, 0] }, correction: { pos: [1.8, 1.3, 2.4], tgt: [0, 0.6, 0.2] } };
+function shot(name) { const s = SHOT[name]; camera.position.set(...s.pos); controls.target.set(...s.tgt); controls.update(); }
+
+// ── Sound: a clap, firmer for a firmer smack; the implement changes its voice ──
+const Sound = (() => {
+  let ctx = null, buf = null;
+  const init = () => {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+      const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    } catch (e) { ctx = null; }
+  };
+  const burst = (t, dur, freq, peak) => {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.002 + dur);
+    s.connect(f); f.connect(g); g.connect(ctx.destination); s.start(t); s.stop(t + dur + 0.05);
+  };
+  const clap = (impl, strength = 1) => {
+    if (!ctx) return;
+    const t = ctx.currentTime, k = 0.25 + 0.2 * strength;
+    if (impl === 'hairbrush') { burst(t, 0.04, 3600, k); burst(t + 0.004, 0.06, 700, 0.55 * k); }
+    else if (impl === 'paddle') { burst(t, 0.07, 2000, 1.1 * k); burst(t + 0.003, 0.11, 420, 0.8 * k); burst(t + 0.006, 0.05, 4200, 0.35 * k); }
+    else { burst(t, 0.09, 2500, 0.9 * k); burst(t + 0.008, 0.05, 1100, 0.5 * k); }
+  };
+  return { init, clap };
+})();
+document.addEventListener('pointerdown', () => Sound.init());
+
+// ── Bodies: built once, kept for the whole run ──
+const bodies = {};
+async function ensureBuilt(keys) {
+  for (const k of keys) {
+    if (bodies[k]) continue;
+    $('load-msg').textContent = 'Preparing ' + (S.PRESETS[k] ? S.PRESETS[k].name : k) + '…';
+    await tick();
+    const ch = S.buildCharacter(S.clone(S.PRESETS[k]), { voxel: 0.010, key: k });
+    ch.group.visible = false;
+    scene.add(ch.group); scene.add(ch.helper);
+    bodies[k] = ch;
+  }
+}
+function stand(ch, x) {
+  S.resetCharacter(ch);
+  ch.group.position.x = x; ch.group.visible = true;
+  ch.group.rotation.y = x < 0 ? 0.12 : x > 0 ? -0.12 : 0;
+}
+function placeHouse() {
+  for (const k in bodies) bodies[k].group.visible = false;
+  const rs = G.house.residents;
+  rs.forEach((r, i) => stand(bodies[r.key], (i - (rs.length - 1) / 2) * 1.05));
+  shot('house'); controls.enabled = false;
+}
+
+// ── Game state ──
+const G = { house: null, phase: 'loading', assign: new Map(), chores: [], sel: null, open: new Set(), result: null, queue: [], scn: null, sess: null };
+const say = m => { $('log').textContent = m; };
+const stat = { wilfulness: 'Wilfulness', attention: 'Attention', resentment: 'Resentment', satisfaction: 'Satisfaction', valued: 'Valued', composure: 'Composure' };
+const pips = n => '<span>' + Array.from({ length: 7 }, (_, i) => `<span class="pip ${i < n ? 'f' : ''}"></span>`).join('') + '</span>';
+function statsHtml(r, from) {
+  const { eff, mod } = F.effectiveAttention(r);
+  const rows = F.STATS.map(st => {
+    const d = from ? r.stats[st] - from[st] : 0;
+    return `<div class="pips"><span class="n">${stat[st]}</span>${pips(r.stats[st])}${d ? `<span class="delta ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</div>`;
+  }).join('');
+  return rows + `<div class="sub" style="margin-top:4px">At chores: ${eff}${mod ? ` (${mod > 0 ? '+' : '−'}${Math.abs(mod)} from state)` : ''}</div>`;
+}
+function banner(msg, ms = 4200) { const b = $('banner'); b.textContent = msg; b.style.display = 'block'; clearTimeout(banner.t); banner.t = setTimeout(() => b.style.display = 'none', ms); }
+
+// ═══ Morning ═══
+async function morning() {
+  const H = G.house;
+  H.backfill(3);
+  await ensureBuilt([...H.residents.map(r => r.key), 'keeper']);
+  H.residents.forEach(r => { if (r.fresh !== false) { S.clearMarks(bodies[r.key]); r.fresh = false; } });
+  placeHouse();
+  G.phase = 'morning'; G.assign = new Map(); G.chores = H.dealChores(); G.sel = null; G.open = new Set();
+  $('loading').style.display = 'none';
+  renderMorning();
+}
+function renderMorning() {
+  const H = G.house;
+  const unplaced = H.residents.filter(r => ![...G.assign.values()].includes(r));
+  hud.innerHTML = `<h1>The Fairy Shoe</h1><div class="sub">Day ${H.day + 1} · Morning · Collection: ${H.collection.length ? H.collection.map(k => F.ROSTER[k].name).join(', ') : 'empty'}</div>
+  <h2>Residents</h2><div class="sub">Tap a resident to see how they are. Drag one onto a chore (or tap, then tap the chore).</div>
+  <div id="res">${H.residents.map(r => `<div class="card ${G.sel === r ? 'sel' : ''}" data-r="${r.key}">
+      <div class="t">${r.name} <span class="s">— ${r.story}</span></div>
+      ${unplaced.includes(r) ? `<span class="chip" draggable="true" data-chip="${r.key}">${r.name}</span>` : `<span class="s">on ${[...G.assign.entries()].find(([, v]) => v === r)[0].name}</span>`}
+      ${G.open.has(r.key) ? `<div style="margin-top:6px">${statsHtml(r)}</div>` : ''}</div>`).join('')}</div>
+  <h2>Chores</h2><div id="chores">${G.chores.map((c, i) => { const who = G.assign.get(c); return `<div class="card" data-c="${i}">
+      <div class="t">${c.name}</div><div class="s">Difficulty ${c.d} · Attention</div>
+      ${who ? `<span class="chip" draggable="true" data-chip="${who.key}">${who.name}</span>` : '<div class="s">— open —</div>'}</div>`; }).join('')}</div>`;
+  const byKey = k => H.residents.find(r => r.key === k);
+  hud.querySelectorAll('[data-r]').forEach(el => el.onclick = e => {
+    const r = byKey(el.dataset.r);
+    if (e.target.closest('[data-chip]') && !G.assign.size) { /* chip click selects */ }
+    if (G.open.has(r.key)) G.open.delete(r.key); else G.open.add(r.key);
+    G.sel = unplaced.includes(r) ? r : null;
+    renderMorning();
+  });
+  hud.querySelectorAll('[data-chip]').forEach(el => el.ondragstart = e => { e.dataTransfer.setData('text/plain', el.dataset.chip); });
+  hud.querySelectorAll('[data-c]').forEach(el => {
+    el.ondragover = e => { e.preventDefault(); el.classList.add('drop'); };
+    el.ondragleave = () => el.classList.remove('drop');
+    el.ondrop = e => { e.preventDefault(); placeOn(+el.dataset.c, byKey(e.dataTransfer.getData('text/plain'))); };
+    el.onclick = () => { if (G.sel) placeOn(+el.dataset.c, G.sel); else { const w = G.assign.get(G.chores[+el.dataset.c]); if (w) { G.assign.delete(G.chores[+el.dataset.c]); renderMorning(); } } };
+  });
+}
+function placeOn(i, r) {
+  if (!r) return;
+  for (const [c, w] of G.assign) if (w === r) G.assign.delete(c);
+  G.assign.set(G.chores[i], r);   // whoever was there goes back to unplaced
+  G.sel = null;
+  renderMorning();
+  if (G.assign.size === G.house.residents.length) setTimeout(() => G.phase === 'morning' && resolveDay(), 500);   // auto-advance once everyone is placed
+}
+
+// ═══ Day resolution (no screen of its own) → corrections ═══
+async function resolveDay() {
+  G.phase = 'resolving';
+  const H = G.house;
+  const assign = [...G.assign.entries()].map(([chore, resident]) => ({ resident, chore }));
+  const res = H.resolveDay(assign);
+  G.result = res;
+  if (res.graduates.length) await announceGraduates(res.graduates);
+  G.queue = res.cards.filter(c => !c.r.graduated);
+  nextCorrection();
+}
+async function announceGraduates(list) {
+  for (const r of list) {
+    banner(`${r.name} has graduated — "${r.story}" is settled. ${r.name} joins the Collection.`, 5000);
+    if (bodies[r.key]) bodies[r.key].group.visible = false;
+    say(`${r.name} left the house a different person from the one who arrived.`);
+  }
+  await new Promise(r => setTimeout(r, 900));
+}
+function nextCorrection() {
+  const H = G.house;
+  G.queue = G.queue.filter(c => H.residents.includes(c.r) && !c.r.graduated);
+  if (!G.queue.length) return endDay();
+  G.card = G.queue.shift(); G.reprieve = null;
+  renderBehaviour();
+}
+function renderBehaviour() {
+  const { r, lines } = G.card;
+  hud.innerHTML = `<h1>${r.name}</h1><div class="sub">Day ${G.house.day} · Evening · ${G.queue.length + 1} left to see</div>
+  <h2>This evening</h2>${lines.map(l => `<div class="beh ${l.kind === 'event' ? 'event' : ''} ${l.trap ? 'trap' : ''}">${l.text}</div>`).join('')}
+  <h2>Your response</h2>
+  <div class="sub">Every resident needs a response. A correction runs live, and you decide when it starts and when it stops.</div>
+  <div class="row"><button class="go" id="b-correct">Begin a correction</button></div>
+  <div class="sub" style="margin-top:8px">Or a Reprieve instead — chosen, then confirmed.</div>
+  <div class="row" id="rep">${Object.entries(F.REPRIEVES).map(([k, n]) => `<button data-rep="${k}" class="${G.reprieve === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+  <div class="row"><button id="b-rep" ${G.reprieve ? '' : 'disabled'}>${G.reprieve ? 'Play ' + F.REPRIEVES[G.reprieve] : 'Play Reprieve'}</button></div>`;
+  placeHouse();
+  const rs = G.house.residents;   // the resident being seen steps forward
+  rs.forEach((x, i) => { bodies[x.key].group.visible = true; });
+  $('b-correct').onclick = beginCorrection;
+  hud.querySelectorAll('[data-rep]').forEach(b => b.onclick = () => { G.reprieve = G.reprieve === b.dataset.rep ? null : b.dataset.rep; renderBehaviour(); });
+  $('b-rep').onclick = () => { if (!G.reprieve) return; const snap = F.applyReprieve(G.house, r, G.reprieve); finishWith(snap); };
+}
+
+// ═══ Correction: a live sandbox. The player starts it, runs it, ends it. ═══
+const IMPL_ORDER = ['hand', 'hairbrush', 'paddle'];
+async function beginCorrection() {
+  const r = G.card.r, s = bodies[r.key], g = bodies.keeper;
+  for (const k in bodies) bodies[k].group.visible = false;
+  S.resetCharacter(g); S.resetCharacter(s);
+  g.group.visible = s.group.visible = true;
+  const scn = S.createDisciplineScene(scene, g, s, { lower: true });
+  scn.onImpact = (side, strength) => { Sound.clap(G.sess.implement, strength); G.sess.pending = false; refreshLive(); };
+  G.scn = scn;
+  G.sess = { implement: 'hand', layer: 'bottoms', force: 0, swats: [], after: new Set(), queued: 0 };
+  scn.setImplement('hand'); scn.setBeat('relaxed');
+  shot('correction'); controls.enabled = true;
+  G.phase = 'correcting';
+  renderLive();
+}
+function setLayer(layer) {
+  const s = G.scn.s;
+  S.setLowered(s, 'bottom', layer !== 'over');
+  S.setLowered(s, 'briefs', layer === 'briefs');
+  G.sess.layer = layer;
+}
+function renderLive() {
+  const { r } = G.card, ss = G.sess;
+  hud.innerHTML = `<h1>${r.name}</h1><div class="sub">Correction — live. You decide when it ends.</div>
+  <h2>Implement</h2><div class="row">${IMPL_ORDER.map(k => `<button data-impl="${k}" class="${ss.implement === k ? 'on' : ''}">${F.IMPLEMENTS[k].label}</button>`).join('')}</div>
+  <h2>Clothing</h2><div class="row">${Object.entries(F.LAYERS).map(([k, v]) => `<button data-layer="${k}" class="${ss.layer === k ? 'on' : ''}">${v.label}</button>`).join('')}</div>
+  <h2>Force</h2><div class="row">${F.FORCES.map(f => `<button data-force="${f.v}" class="${ss.force === f.v ? 'on' : ''}">${f.label}</button>`).join('')}</div>
+  <div class="row"><button class="go" id="b-smack">Smack (Space)</button></div>
+  <div class="meter" id="live"></div>
+  <h2>Aftercare</h2><div class="sub">Any combination, applied when you finish.</div>
+  <div class="row">${Object.entries(F.AFTERCARE).map(([k, n]) => `<button data-after="${k}" class="${ss.after.has(k) ? 'on' : ''}">${n}</button>`).join('')}</div>
+  <div class="row" style="margin-top:12px"><button id="b-finish" class="go">Finish</button></div>
+  <div class="sub">Orbit the view with the mouse. Implement, clothing and force can change at any point mid-correction; each smack counts with what it was delivered with.</div>`;
+  hud.querySelectorAll('[data-impl]').forEach(b => b.onclick = () => { ss.implement = b.dataset.impl; G.scn.setImplement(ss.implement); renderLive(); });
+  hud.querySelectorAll('[data-layer]').forEach(b => b.onclick = () => { setLayer(b.dataset.layer); renderLive(); });
+  hud.querySelectorAll('[data-force]').forEach(b => b.onclick = () => { ss.force = +b.dataset.force; renderLive(); });
+  hud.querySelectorAll('[data-after]').forEach(b => b.onclick = () => { const k = b.dataset.after; ss.after.has(k) ? ss.after.delete(k) : ss.after.add(k); renderLive(); });
+  $('b-smack').onclick = smack;
+  $('b-finish').onclick = finishCorrection;
+  refreshLive();
+}
+function refreshLive() {
+  const el = $('live'); if (!el || !G.sess) return;
+  const v = F.liveSeverity(G.sess.swats);
+  el.innerHTML = `Smacks: <b>${v.n}</b> &nbsp; Severity so far: <b>${v.total}</b> (${F.BAND_NAMES[F.bandOf(v.total)]})`;
+  $('b-finish').disabled = !v.n;
+}
+// One smack: lift, then strike the next site. A press during a swing is held for the next one.
+function smack() {
+  const scn = G.scn, ss = G.sess; if (!scn || G.phase !== 'correcting') return;
+  if (scn.busy()) { ss.queued = Math.min(1, ss.queued + 1); return; }
+  const f = ss.force, strength = Math.max(0.25, Math.min(1, 0.6 + 0.14 * f));
+  const speed = 1 + 0.18 * f;
+  ss.swats.push({ implement: ss.implement, layer: ss.layer, force: f });
+  scn.timing.speed = speed;
+  scn.cycle(strength);
+  const wait = () => { if (!G.scn) return; if (scn.busy()) return requestAnimationFrame(wait); if (ss.queued) { ss.queued = 0; smack(); } };
+  requestAnimationFrame(wait);
+}
+function finishCorrection() {
+  const ss = G.sess, scn = G.scn;
+  if (!ss.swats.length) return;
+  const run = () => {
+    if (scn.busy()) return setTimeout(run, 60);
+    scn.lower(0.6);
+    setTimeout(() => {
+      const r = G.card.r;
+      const snap = F.applyCorrection(G.house, r, G.card.mod, ss.swats, [...ss.after]);
+      closeScene();
+      finishWith(snap);
+    }, 700);
+  };
+  G.phase = 'finishing'; run();
+}
+function closeScene() {
+  const scn = G.scn, g = bodies.keeper, s = G.card.r && bodies[G.card.r.key];
+  scn.dispose(); S.setLowered(s, 'briefs', false);
+  G.scn = null; controls.enabled = false;
+}
+async function finishWith(snap) {
+  G.phase = 'result';
+  const H = G.house;
+  const r = H.residents.concat(H.pendingGrads).find(x => x.key === snap.key);
+  const rows = F.STATS.map(st => {
+    const d = snap.now[st] - snap.before[st];
+    return `<div class="pips"><span class="n">${stat[st]}</span>${pips(snap.now[st])}${d ? `<span class="delta ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</div>`;
+  }).join('');
+  let head;
+  if (snap.kind === 'reprieve') head = `<div class="meter">Reprieve: <b>${snap.card}</b></div>`;   // no severity or match: a Reprieve isn't scored
+  else head = `<div class="meter">Smacks <b>${snap.sev.n}</b> · Severity <b>${snap.sev.total}</b> (${snap.match.got}) · <b>${snap.match.name}</b></div>
+    <div class="sub">Implement ${snap.sev.implement >= 0 ? '+' : ''}${snap.sev.implement} · Clothing ${snap.sev.layer >= 0 ? '+' : ''}${snap.sev.layer} · Force ${snap.sev.force >= 0 ? '+' : ''}${snap.sev.force} · Length ${snap.sev.length >= 0 ? '+' : ''}${snap.sev.length}${snap.after && snap.after.length ? ' · Aftercare: ' + snap.after.map(a => F.AFTERCARE[a]).join(', ') : ''}</div>`;
+  hud.innerHTML = `<h1>${snap.name}</h1><div class="sub">Day ${H.day} · ${snap.kind === 'reprieve' ? 'Reprieve' : 'Correction'} result</div><h2>Result</h2>${head}<div style="margin-top:10px">${rows}</div>
+    <div class="row" style="margin-top:14px"><button class="go" id="b-next">Continue</button></div>`;
+  placeHouse();
+  const grads = H.takeGraduates();
+  if (grads.length) await announceGraduates(grads);
+  $('b-next').onclick = () => { nextCorrection(); };
+}
+
+// ═══ End of the day: runaways, marks fade, the house refills ═══
+async function endDay() {
+  const H = G.house;
+  const gone = F.resolveRunaways(H);
+  for (const r of gone) { say(`${r.name} is gone in the morning. No note.`); if (bodies[r.key]) bodies[r.key].group.visible = false; }
+  for (const k in bodies) S.fadeMarksBy(bodies[k], 0.7);
+  $('loading').style.display = 'flex'; $('load-msg').textContent = 'A new day…';
+  await morning();
+}
+
+// ═══ Loop ═══
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  const live = Object.values(bodies).filter(c => c.group.visible);
+  const inScene = G.scn ? [G.scn.g, G.scn.s] : [];
+  for (const ch of live) if (!inScene.includes(ch)) S.animateCharacter(ch, dt, t);
+  if (G.scn) G.scn.update(dt);
+  for (const ch of Object.values(bodies)) S.fadeMarks(ch, dt);
+  for (const ch of live) { ch.group.updateMatrixWorld(true); S.bustSpring(ch, dt); }
+  for (const ch of live) S.bustContact(ch, live);
+  S.updateContacts(live);
+  const colliders = live.flatMap(S.bodyColliders);
+  for (const ch of live) S.hairStep(ch, dt, colliders);
+  for (const ch of live) S.faceStep(ch, dt);
+  for (const ch of live) S.skirtStep(ch, dt, live, [G.scn && G.scn.bench]);
+  for (const ch of live) S.bunchStep(ch);
+  controls.update();
+  renderer.render(scene, camera);
+}
+document.addEventListener('keydown', e => { if (e.code === 'Space' && G.phase === 'correcting') { e.preventDefault(); smack(); } });
+
+// ═══ Start ═══
+(async function start() {
+  G.house = F.createHouse();
+  shot('house'); controls.enabled = false;
+  frame();
+  await morning();
+})();
+window.__game = { G, S, F, bodies, camera, smack, beginCorrection, finishCorrection, setLayer, resolveDay, morning, placeOn, get scn() { return G.scn; } };
+})();
+</script>
+</body>
+</html>

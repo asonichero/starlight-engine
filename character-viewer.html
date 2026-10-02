@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Starlight — Character Viewer</title>
+<title>The Fairy Shoe — Character Viewer</title>
 <style>
   html, body { margin: 0; padding: 0; overflow: hidden; background: #16161b; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: #e8e6e3; }
   #view { position: fixed; top: 0; left: 0; right: 320px; bottom: 0; }
@@ -60,16 +60,6 @@
   <div id="layers"></div>
   <div class="sub" style="margin:8px 0 3px">Skin tone</div>
   <div class="swatches" id="skins"></div>
-
-  <h3>Dance</h3>
-  <div class="poses" id="dance-moves"></div>
-  <div class="toggles" style="margin-top:6px">
-    <button id="d-prep">Hold on prep</button>
-    <button id="d-routine">Play routine</button>
-    <button id="d-export">Export moves</button>
-  </div>
-  <div class="row" style="margin-top:8px"><label><span>Tempo</span><span id="v-bpm">100 BPM</span></label><input id="s-bpm" type="range" min="60" max="160" step="2" value="100"></div>
-  <div class="sub" id="d-now" style="min-height:1.4em"></div>
 
   <h3>Pose</h3>
   <div class="poses" id="poses"></div>
@@ -154,7 +144,7 @@
 <script>
 (function () {
 'use strict';
-// The models, discipline scene and dance library live in starlight-engine.js;
+// The models and discipline scene live in starlight-engine.js;
 // this file is the viewer's UI around them.
 const S = window.Starlight;
 const { PRESETS, ORDER, BONES, POSES, clone } = S;
@@ -223,10 +213,10 @@ scene.add(floor);
 // ════════════════════════════════════════════════════════════════
 // STATE + UI
 // ════════════════════════════════════════════════════════════════
-const view = { lineup: false, skeleton: false, weights: false, wire: false, spin: false, voxel: 0.010, pose: 'Relaxed', selected: 'aya' };
+const view = { lineup: false, skeleton: false, weights: false, wire: false, spin: false, voxel: 0.010, pose: 'Relaxed', selected: 'red' };
 let chars = {};
 // Discipline scene settings (applied to the engine's scene state when it's built).
-const sc = { sound: true, implement: 'hand', on: false, giver: 'aya', subject: 'kiko', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
+const sc = { sound: true, implement: 'hand', on: false, giver: 'keeper', subject: 'red', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
 let scn = null;   // the engine's scene state while shown
 // Pose editor state (see POSE EDITOR); while `on`, the scene is frozen and edited by hand.
 const PE = { on: false };
@@ -312,7 +302,7 @@ const posesEl = document.getElementById('poses');
 [...Object.keys(POSES), HANDS_ON_HEAD, SPREAD].forEach(name => {
   const b = document.createElement('button');
   b.textContent = name; b.dataset.pose = name;
-  b.onclick = () => { danceStop(); view.pose = name; Object.values(chars).forEach(ch => applyPose(ch, name)); refreshPoses(); placeChars(); };
+  b.onclick = () => { view.pose = name; Object.values(chars).forEach(ch => applyPose(ch, name)); refreshPoses(); placeChars(); };
   posesEl.appendChild(b);
 });
 function refreshPoses() { posesEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.pose === view.pose)); }
@@ -707,7 +697,7 @@ BEATS.forEach(([beat, label]) => {
 document.getElementById('sc-on').onclick = () => {
   if (PE.on && sc.on) PE.stop();
   sc.on = !sc.on;
-  if (sc.on) { danceStop(); buildScene(); camera.position.set(1.8, 1.3, 2.4); controls.target.set(0, 0.6, 0.2); }
+  if (sc.on) { buildScene(); camera.position.set(1.8, 1.3, 2.4); controls.target.set(0, 0.6, 0.2); }
   else { clearScene(); camera.position.set(1.2, 1.25, 3.2); }
   placeChars(); refreshSceneUI();
 };
@@ -744,64 +734,7 @@ document.getElementById('s-aim').oninput = e => {
   document.getElementById('v-aim').textContent = e.target.value + '%';
 };
 
-// ════════════════════════════════════════════════════════════════
-// DANCE UI — every character on the turntable plays the same moves.
-// ════════════════════════════════════════════════════════════════
-const DV = { active: false, freezePrep: false, bpm: 100, t: 0, end: 0 };
 const visibleChars = () => Object.values(chars).filter(c => c.group.visible);
-function dancePlay(keys) {
-  if (sc.on) return;
-  view.pose = null; refreshPoses();
-  for (const ch of Object.values(chars)) { ch.handsOnHead = false; ch.stanceDrop = 0; }
-  for (const ch of visibleChars()) {
-    if (!ch.dancer) { ch.group.rotation.y = 0; ch.group.position.y = 0; S.createDancer(ch); }
-    ch.dancer.play(keys);
-  }
-  DV.active = true;
-}
-function danceStop() {
-  DV.active = false;
-  for (const ch of Object.values(chars)) if (ch.dancer) { ch.dancer.stop(); ch.dancer = null; }
-  document.getElementById('d-now').textContent = '';
-}
-// One move: prep, then the hit (unless holding on prep for inspection).
-function dancePlayMove(name) {
-  const keys = [{ t: 0, move: name, kind: 'prep', dur: 0.3 }];
-  if (!DV.freezePrep) keys.push({ t: 0.45, move: name, kind: 'hit', dur: 0.35 });
-  dancePlay(keys);
-}
-// A routine shaped like the game's: seven moves (Hold never first) then the bow,
-// hits on the beat and preps half a beat before.
-function dancePlayRoutine() {
-  const pool = Object.keys(S.DANCE_MOVES).filter(n => n !== 'Final Bow' && n !== 'Hold the Pose');
-  const seq = [];
-  while (seq.length < 7) {
-    const n = Math.random() < 0.12 && seq.length ? 'Hold the Pose' : pool[Math.floor(Math.random() * pool.length)];
-    if (n !== seq[seq.length - 1]) seq.push(n);
-  }
-  seq.push('Final Bow');
-  const b = 60 / DV.bpm, keys = [];
-  seq.forEach((n, i) => {
-    const hitT = (i + 1) * b;
-    if (n !== 'Hold the Pose') keys.push({ t: hitT - b / 2, move: n, kind: 'prep', dur: b / 2 });
-    keys.push({ t: hitT, move: n, kind: 'hit', dur: b / 2 });
-  });
-  dancePlay(keys);
-}
-const movesEl = document.getElementById('dance-moves');
-Object.keys(S.DANCE_MOVES).filter(n => n !== 'Hold the Pose').forEach(name => {
-  const b = document.createElement('button');
-  b.textContent = name;
-  b.onclick = () => dancePlayMove(name);
-  movesEl.appendChild(b);
-});
-document.getElementById('d-prep').onclick = e => { DV.freezePrep = !DV.freezePrep; e.target.classList.toggle('on', DV.freezePrep); };
-document.getElementById('d-routine').onclick = () => dancePlayRoutine();
-document.getElementById('s-bpm').oninput = e => { DV.bpm = +e.target.value; document.getElementById('v-bpm').textContent = DV.bpm + ' BPM'; };
-document.getElementById('d-export').onclick = () => {
-  jsonEl.style.display = 'block';
-  jsonEl.value = JSON.stringify({ base: S.DANCE_BASE, moves: S.DANCE_SRC, mirrored: Object.fromEntries(S.SIDED.map(b => [b + ' R', b + ' L'])) }, null, 1);
-};
 
 // ════════════════════════════════════════════════════════════════
 // POSE EDITOR — freezes the discipline scene at its beat so the bodies and
@@ -1251,14 +1184,12 @@ function animate() {
   for (const ch of visibleChars()) {
     S.animateCharacter(ch, dt, t);
     // A wide stance lowers the body; ease it at the pose's own rate so the feet stay down.
-    if (!ch.dancer) ch.group.position.y += (-(ch.stanceDrop || 0) - ch.group.position.y) * (1 - Math.exp(-dt * 7));
-    if (view.spin && !ch.dancer) ch.group.rotation.y += dt * 0.5;
+    ch.group.position.y += (-(ch.stanceDrop || 0) - ch.group.position.y) * (1 - Math.exp(-dt * 7));
+    if (view.spin) ch.group.rotation.y += dt * 0.5;
   }
-  const cur = DV.active && visibleChars().map(c => c.dancer && c.dancer.current).find(Boolean);
-  document.getElementById('d-now').textContent = cur ? cur.move + (cur.kind === 'prep' ? ' — prep' : '') : '';
   if (scn && !PE.on) scn.update(dt);
   if (PE.on) PE.frame();
-  // Marks fade slowly (a little faster while dancing).
+  // Marks fade slowly .
   for (const ch of [...Object.values(chars), ...(scn ? [scn.g, scn.s] : [])]) S.fadeMarks(ch, dt);
   const onStage = [...visibleChars(), ...(scn ? [scn.g, scn.s] : [])];
   for (const ch of onStage) {
@@ -1282,8 +1213,8 @@ function animate() {
 // folded is remembered in this browser (per viewer), if storage is available.
 (() => {
   let shut = {};
-  try { shut = JSON.parse(localStorage.getItem('starlight-viewer-folds') || '{}'); } catch (e) {}
-  const save = () => { try { localStorage.setItem('starlight-viewer-folds', JSON.stringify(shut)); } catch (e) {} };
+  try { shut = JSON.parse(localStorage.getItem('fairyshoe-viewer-folds') || '{}'); } catch (e) {}
+  const save = () => { try { localStorage.setItem('fairyshoe-viewer-folds', JSON.stringify(shut)); } catch (e) {} };
   document.querySelectorAll('#panel h3').forEach(h => {
     const name = h.firstChild.textContent.trim().replace(/\s*—$/, '');
     const body = [];
@@ -1298,7 +1229,7 @@ rebuild(ORDER);
 animate();
 
 // Test hooks for automated screenshots
-window.__viewer = { S, DV, dancePlayMove, dancePlayRoutine, danceStop, view, chars, rebuild, placeChars, camera, controls,
+window.__viewer = { S, view, chars, rebuild, placeChars, camera, controls,
   applyViewToChar, current, sc, PE, placeTool, toolPose, rightClearance, get scn() { return scn; }, buildScene, buildClothing, applyPose, refreshTabs, fieldAt: (ch, q) => S.field(ch.spec, [q.x, q.y, q.z]) };
 })();
 </script>
