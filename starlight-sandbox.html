@@ -94,9 +94,10 @@ const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand'
 // The strike settings (start from the severity, then follow the sliders) and each character's own limits (start from their preset).
 const strike = { speed: 1, hold: 0.3, dwell: 0.6, count: 12 };
 const stats = {}; ORDER.forEach(k => stats[k] = { tolerance: PRESETS[k].tolerance, resilience: PRESETS[k].resilience });
-function fromSeverity() { const v = SEVERITY[sel.severity]; strike.speed = v.speed; strike.hold = v.hold; strike.dwell = v.dwell; strike.count = v.count; }
-fromSeverity();
 let scn = null, running = false, done = 0, since = 0, total = 0;
+const SEV_FACE = [0.15, 0.45, 0.75, 1];   // how stern the disciplinarian's face is, by severity
+function fromSeverity() { if (scn) scn.severity = SEV_FACE[sel.severity]; const v = SEVERITY[sel.severity]; strike.speed = v.speed; strike.hold = v.hold; strike.dwell = v.dwell; strike.count = v.count; }
+fromSeverity();
 
 // ── Three.js scene ───────────────────────────────────────
 const lin = S.lin;
@@ -173,7 +174,7 @@ function build() {
   for (const c of [g, s]) { scene.add(c.group); scene.add(c.helper); c.helper.visible = false; }
   const sv = savedMarks[sel.subject];
   if (sv) { s.marks = sv.marks; s.stripes = sv.stripes; S.copyMarks(s, s); }
-  scn = S.createDisciplineScene(scene, g, s, { lower: sel.bottoms, position: sel.position, pain: stats[sel.subject] });   // (the same object: the sliders change the limits live)
+  scn = S.createDisciplineScene(scene, g, s, { lower: sel.bottoms, position: sel.position, pain: stats[sel.subject], faces: true, severity: SEV_FACE[sel.severity] });   // (the same object: the sliders change the limits live)
   if (sel.briefs) S.setLowered(s, 'briefs', true);
   scn.onImpact = (side, strength) => { Sound.clap(strength); done++; since = 0; updateStatus(); };
   scn.setImplement(sel.implement);
@@ -279,9 +280,6 @@ function frame() {
       m.style.width = Math.min(100, d * 100) + '%';
       m.style.background = d < 0.3 ? '#6b9e5a' : d < 0.6 ? '#b4a24a' : d < 0.9 ? '#c8803c' : '#c24a3a';
       document.getElementById('band').textContent = `${pair.s.spec.m.name}: ${scn.pain.band()}`;
-      // The face follows how worked up they are.
-      const e = Math.max(0, (d - 0.35) / 0.65);
-      if (e > 0.02) S.setMood(pair.s, 'effort', Math.min(1, e)); else if (pair.s.mood) S.setMood(pair.s, null);
     }
   }
   controls.update();
@@ -295,7 +293,7 @@ setTimeout(() => {
   frame();
 }, 50);
 // Test hook
-window.__sandbox = { sel, get scn() { return scn; }, get pair() { return pair; }, build, startRun, stopRun, refresh, SEVERITY };
+window.__sandbox = { camera, controls, sel, get scn() { return scn; }, get pair() { return pair; }, build, startRun, stopRun, refresh, SEVERITY };
 })();
 </script>
 </body>

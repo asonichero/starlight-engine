@@ -32,7 +32,7 @@
 // from the full underwear base layer, and the clothes go over it.
 const PRESETS = {
   aya: {
-    name: 'Aya', build: 'female', tolerance: 0.75, resilience: 0.6, height: 172, legs: 1.02, shoulders: 38,
+    name: 'Aya', expressive: 1.1, build: 'female', tolerance: 0.75, resilience: 0.6, height: 172, legs: 1.02, shoulders: 38,
     bust: 86, underbust: 72, waist: 63, hip: 100.5,
     neck: 31, arm: 25, forearm: 22, wrist: 14.5,
     thigh: 52, knee: 34, calf: 33, ankle: 20.5, cup: 3, glutes: 1.32, head: 1.0,
@@ -59,7 +59,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   rin: {
-    name: 'Rin', build: 'female', tolerance: 0.5, resilience: 0.55, height: 163, legs: 1.05, shoulders: 37,
+    name: 'Rin', expressive: 1.0, build: 'female', tolerance: 0.5, resilience: 0.55, height: 163, legs: 1.05, shoulders: 37,
     bust: 75.5, underbust: 68, waist: 62.5, hip: 87.5,
     neck: 26, arm: 23, forearm: 19, wrist: 13.5,
     thigh: 38, knee: 28, calf: 26, ankle: 19.5, cup: 2, glutes: 1.4, head: 1.04,
@@ -85,7 +85,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kiko: {
-    name: 'Kiko', build: 'female', tolerance: 0.35, resilience: 0.45, height: 158, legs: 1.04, shoulders: 35,
+    name: 'Kiko', expressive: 1.1, build: 'female', tolerance: 0.35, resilience: 0.45, height: 158, legs: 1.04, shoulders: 35,
     bust: 86, underbust: 60, waist: 64.5, hip: 93.5,
     neck: 26, arm: 30, forearm: 21, wrist: 14,
     thigh: 49.5, knee: 32.5, calf: 27.5, ankle: 20, cup: 4, glutes: 1.4, head: 1.1,
@@ -112,7 +112,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kenji: {
-    name: 'Kenji', build: 'male', tolerance: 0.65, resilience: 0.7, height: 181.5, legs: 1.02, shoulders: 45,
+    name: 'Kenji', expressive: 0.6, build: 'male', tolerance: 0.65, resilience: 0.7, height: 181.5, legs: 1.02, shoulders: 45,
     bust: 96, underbust: 90, waist: 80, hip: 94,
     neck: 38, arm: 32.5, forearm: 27, wrist: 17,
     thigh: 54, knee: 38, calf: 37, ankle: 23, glutes: 1.4, head: 1.0,
@@ -1695,9 +1695,23 @@ const MOODS = {
   effort:    { teeth: 0.9, mouthL: -0.3, mouthR: -0.3, browFurrow: 0.6, browInner: -0.2, squint: 0.6, lidUpper: -0.35 },
   enjoyment: { teeth: 0.75, mouthL: 0.75, mouthR: 0.75, squint: 0.45, browOuter: 0.1 },
   open:      { mouthOpen: 0.8, browInner: 0.3, browOuter: 0.25, lidUpper: 0.3 },
+  // Discipline faces (see faceState): the subject's, layered by the driver…
+  dread:     { browInner: 0.55, browOuter: 0.25, lidUpper: 0.45, browFurrow: 0.15, mouthL: -0.1, mouthR: -0.1 },
+  wince:     { squint: 0.9, lidUpper: -0.7, browFurrow: 0.8, browInner: -0.15, teeth: 0.8, mouthL: -0.45, mouthR: -0.45 },
+  strain:    { browFurrow: 0.35, squint: 0.3, lidUpper: -0.1, mouthL: -0.15, mouthR: -0.15 },
+  distress:  { browInner: 0.5, browFurrow: 0.6, squint: 0.55, lidUpper: -0.45, mouthL: -0.55, mouthR: -0.55, mouthOpen: 0.3, teeth: 0.3 },
+  exhale:    { mouthOpen: 0.45, lidUpper: -0.2, browInner: 0.2, browFurrow: -0.1 },
+  // …and the disciplinarian's, by severity and beat.
+  calm:      { mouthL: 0.12, mouthR: 0.12, browInner: 0.08, lidUpper: -0.05 },
+  focus:     { browFurrow: 0.2, browInner: -0.1, squint: 0.15, lidUpper: 0.05 },
+  stern:     { browFurrow: 0.65, browInner: -0.25, squint: 0.35, lidUpper: -0.1, mouthL: -0.35, mouthR: -0.35, teeth: 0.1 },
+  exertion:  { teeth: 0.5, browFurrow: 0.3, squint: 0.3, mouthL: -0.2, mouthR: -0.2 },
+  ease:      { browInner: 0.55, browOuter: 0.1, browFurrow: -0.4, mouthL: 0.2, mouthR: 0.2, lidUpper: 0.1 },
 };
 const EXPR_RANGE = { browFurrow: [0, 1], squint: [0, 1], teeth: [0, 1], mouthOpen: [0, 1], saccade: [0, 1], contact: [0, 1], blink: [0, 3] };
-function setMood(ch, name, amount = 1) { ch.mood = MOODS[name] ? { name, target: amount } : null; }
+// One mood at a time (setMood), or several layered, each with its own weight (setMoods({ dread: 0.6, wince: 0.9 })).
+function setMood(ch, name, amount = 1) { ch.moodT = MOODS[name] ? { [name]: amount } : {}; }
+function setMoods(ch, weights) { ch.moodT = weights || {}; }
 // A character's version of a mood: their preset's `moods[name]` if it has one (each
 // character can be tuned; see the viewer), otherwise the shared MOODS entry.
 const moodFor = (m, name) => (m.moods && m.moods[name]) || MOODS[name];
@@ -1716,19 +1730,20 @@ function faceStep(ch, dt) {
   if (!F || !ch.expr) return;
   // The expression in effect: the character's own, plus the current mood's offsets
   // (blended in and out over a quarter of a second).
-  const mv = ch.moodVal || (ch.moodVal = { name: null, amt: 0 });
-  const tgt = ch.mood ? ch.mood.target : 0;
-  if (ch.mood && ch.mood.name !== mv.name) { if (mv.amt < 0.02) mv.name = ch.mood.name; }
-  const want = ch.mood && ch.mood.name === mv.name ? tgt : 0;
-  mv.amt += (want - mv.amt) * (dt > 0 ? 1 - Math.exp(-dt / 0.08) : 1);
-  let e = ch.expr;
-  if (mv.name && mv.amt > 0.001) {
-    e = { ...e };
-    for (const [k, v] of Object.entries(moodFor(ch.spec.m, mv.name))) {
-      const [lo, hi] = EXPR_RANGE[k] || [-1, 1];
-      e[k] = clamp((e[k] || 0) + v * mv.amt, lo, hi);
-    }
+  const mv = ch.moodVal || (ch.moodVal = {}), T = ch.moodT || {};
+  const mk = dt > 0 ? 1 - Math.exp(-dt / 0.08) : 1;
+  for (const n of new Set([...Object.keys(mv), ...Object.keys(T)])) {
+    mv[n] = (mv[n] || 0) + ((T[n] || 0) - (mv[n] || 0)) * mk;
+    if (mv[n] < 0.001 && !T[n]) delete mv[n];
   }
+  let e = ch.expr;
+  const touched = new Set();
+  for (const [n, amt] of Object.entries(mv)) {
+    if (!MOODS[n] || amt < 0.001) continue;
+    if (!touched.size) e = { ...e };
+    for (const [k, v] of Object.entries(moodFor(ch.spec.m, n))) { e[k] = (e[k] || 0) + v * amt; touched.add(k); }
+  }
+  for (const k of touched) { const [lo, hi] = EXPR_RANGE[k] || [-1, 1]; e[k] = clamp(e[k], lo, hi); }
   const A = ch.faceAnim || (ch.faceAnim = { t: 0, nextBlink: 1 + Math.random() * 3, blink: 0, gx: 0, gy: 0, tx: 0, ty: 0, nextSacc: 0.5 });
   A.t += dt;
   // Blinks: a quick close and open (0.16 s), every 2–6 s / rate.
@@ -1743,7 +1758,9 @@ function faceStep(ch, dt) {
   }
   const k = dt > 0 ? 1 - Math.exp(-dt * 30) : 1;      // eyes move fast
   A.gx += (A.tx - A.gx) * k; A.gy += (A.ty - A.gy) * k;
-  const H = F.H, gx = clamp(e.gazeX + A.gx, -1, 1), gy = clamp(e.gazeY + A.gy, -1, 1);
+  // A look toward something (ch.gazeFx: x, y, and how much it takes over the resting gaze and the eyes' wandering).
+  const GF = ch.gazeFx, gw = GF ? clamp(GF.w, 0, 1) : 0;
+  const H = F.H, gx = clamp(e.gazeX * (1 - gw) + (GF ? GF.x * gw : 0) + A.gx * (1 - 0.85 * gw), -1, 1), gy = clamp(e.gazeY * (1 - gw) + (GF ? GF.y * gw : 0) + A.gy * (1 - 0.85 * gw), -1, 1);
   for (const S of F.sides) {
     const s = S.s, E = S.E;
     // Gaze: iris and pupil across the white.
@@ -2893,7 +2910,7 @@ const LAP_ALONG = 0.7, LAP_SETTLE = 0.9;
 function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
-    fitCache: {}, onImpact: null, dv: null, pendingFlip: false, raisedT: 0,
+    fitCache: {}, onImpact: null, dv: null, pendingFlip: false, raisedT: 0, faces: !!opts.faces, severity: opts.severity != null ? opts.severity : null,
     pain: opts.pain ? createPain(typeof opts.pain === 'object' ? opts.pain : { tolerance: s.spec.m.tolerance, resilience: s.spec.m.resilience }) : null,
     atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees' || opts.position === 'spread', atHead: opts.position === 'head', atKnees: opts.position === 'knees' || opts.position === 'spread', atSpread: opts.position === 'spread', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
@@ -3024,7 +3041,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // A smack lands: with a pain model (opts.pain) the subject's reaction comes from it (the implement, strength, how fast the
   // swing, how long the arm waited raised, how tender the skin already is), otherwise from `strength` as it always did.
   scn.land = strength => {
-    const waited = scn.raisedT; scn.raisedT = 0;
+    const waited = scn.raisedT; scn.raisedT = 0; scn.lastStrength = strength;
     if (!scn.pain) return strength;
     const mk = s.marks, tender = mk ? Math.max(mk.L.f || 0, mk.R.f || 0) : 0;
     scn.lastHit = scn.pain.hit({ implement: scn.implement, strength, speed: scn.timing.speed, raised: waited, tender, cushion: clothCushion(s) });
@@ -3090,6 +3107,109 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   return scn;
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// FACES in the discipline scene (opts.faces). Two layers of expression, set each frame from the scene (faceState) and
+// layered with setMoods:
+//   the subject — a slow baseline from how worked up they are (the model's distress and how hard recent smacks landed:
+//     composed → strain → distress), with the fast beats on top: dread while the arm waits raised, a wince at contact
+//     (as sharp as the sting that got through the clothing), a breath out after. Tolerance masks it (a stoic face holds
+//     until they're near their limit), a low tolerance shows early; `expressive` on a preset scales it.
+//   the disciplinarian — their severity: calm (light) → focused (medium) → stern (firm, severe), with effort on the swing,
+//     and an easing of the face when the subject is near their limit. `scn.severity` (0–1) sets it, otherwise it follows
+//     the strikes' strength and speed. `expressive` scales it per character.
+// Glances (relative animation, the anchored poses stay put): the eyes, and a little of the head and neck, turn to the
+// other's face and back — the subject peeks back as the arm waits and after a smack, the disciplinarian checks the
+// subject's face as the arm rises and reads their reaction after a landing (longer for firmer correction) and keeps looking
+// when they're near their limit. The subject's head also tosses a little on contact.
+// ════════════════════════════════════════════════════════════════
+const FACE = {
+  HEAT_TAU: 8, WINCE_TAU: 1.1,
+  SUBJ_HEAD_CAP: 0.5, GIVER_HEAD_CAP: 0.6, HEAD_FLINCH: 0.1,   // radians
+  EYE_GAIN: 2.2,
+};
+const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const glanceW = G => { if (!G) return 0; const t = G.f.t - G.t0; return t < 0 || t > G.dur ? 0 : Math.min(1, t / 0.25, (G.dur - t) / 0.35); };
+function faceState(scn, dt) {
+  const g = scn.g, s = scn.s, P = scn.pain;
+  const f = scn.fx || (scn.fx = { t: 0, heat: 0, wince: 0, since: 9, impacts: 0, ps: 0, exert: 0, sG: null, gG: null, sGw: 0, gGw: 0 });
+  f.t += dt; f.since += dt;
+  const swing = scn.swing, prev = f.ps;
+  f.wince *= Math.exp(-dt / FACE.WINCE_TAU); f.heat *= Math.exp(-dt / FACE.HEAT_TAU);
+  const d = P ? P.distress() : 0;
+  const sev = scn.severity != null ? scn.severity : clamp(0.75 * (scn.lastStrength != null ? scn.lastStrength : 0.5) + 0.25 * clamp((scn.timing.speed - 0.6) / 1.0, 0, 1), 0, 1);
+  const L = clamp(f.heat * 0.85 + d * 1.3, 0, 1);     // how worked up they look
+  const tol = P ? P.stats.tolerance : (s.spec.m.tolerance != null ? s.spec.m.tolerance : 0.5);
+  // The subject's mask: stoic holds until near the limit; low tolerance shows early.
+  const sA = clamp((1 - 0.45 * clamp((tol - 0.4) / 0.4, 0, 1) * (1 - ss(0.55, 0.95, L))) * (1 + 0.25 * clamp((0.5 - tol) / 0.3, 0, 1)) * (s.spec.m.expressive != null ? s.spec.m.expressive : 1), 0, 1.15);
+  const gA = clamp(g.spec.m.expressive != null ? g.spec.m.expressive : 1, 0, 1.2);
+
+  // A smack landed.
+  if (scn.impacts !== f.impacts) {
+    f.impacts = scn.impacts; f.since = 0;
+    const h = scn.lastHit, r = h ? h.reaction : scn.reaction;
+    let share = 0.5;
+    if (P && P.last) share = P.last.sting / Math.max(1e-6, P.last.sting + P.last.ache);
+    f.wince = Math.max(f.wince, Math.min(1, 1.6 * r * (0.35 + 0.65 * Math.min(1, share * 1.6))));
+    f.heat += (r - f.heat) * 0.5;
+    // The disciplinarian reads the reaction (a longer look for firmer correction); the subject looks back once the sting passes, if composed.
+    f.gG = { f, t0: f.t + 0.2, dur: 0.7 + 1.0 * sev };
+    if (Math.random() < 0.5 * (1 - ss(0.4, 0.8, L))) f.sG = { f, t0: f.t + 0.9 + Math.random() * 0.7, dur: 0.7 + Math.random() * 0.5 };
+  }
+  // The arm comes up: the disciplinarian checks the subject's face; the subject may peek back.
+  if (swing > 0.6 && prev <= 0.6) {
+    f.gG = { f, t0: f.t, dur: 0.8 + 0.5 * (1 - sev) };
+    if (Math.random() < 0.65 * (1 - ss(0.5, 0.9, L))) f.sG = { f, t0: f.t + 0.3 + Math.random() * 0.5, dur: 0.7 + Math.random() * 0.5 };
+  }
+  f.ps = swing;
+  const striking = swing > 1.05 && swing < 1.95 && swing >= prev - 1e-6;
+  const ease = P ? Math.max(ss(0.7, 1.0, d), P.atLimit ? 1 : 0) : 0;
+  let gT = glanceW(f.gG); if (swing > 1.05 && swing < 1.95) gT = 0; gT = Math.max(gT, 0.85 * ease);
+  let sT = glanceW(f.sG) * (1 - ss(0.75, 1.0, L));   // near their limit, eyes shut: no peeking
+  f.gGw += (gT - f.gGw) * (1 - Math.exp(-dt * 7)); f.sGw += (sT - f.sGw) * (1 - Math.exp(-dt * 7));
+
+  // Subject moods.
+  const dread = ss(0.45, 1, swing) * (swing <= 1.02 ? 1 : 1 - ss(1.02, 1.35, swing)) * (0.45 + 0.55 * Math.min(1, scn.raisedT / 0.9));
+  const exhale = ss(0.7, 1.2, f.since) * (1 - ss(1.8, 2.8, f.since)) * (0.3 + 0.7 * Math.min(1, L * 2)) * (1 - dread);
+  setMoods(s, { dread: dread * (0.6 + 0.4 * sA), wince: f.wince * sA, strain: ss(0.22, 0.55, L) * sA, distress: ss(0.5, 0.95, L) * sA, exhale: exhale * sA });
+  // Disciplinarian moods.
+  const stern = ss(0.35, 0.85, sev) * (1 - ease), calm = 1 - ss(0.1, 0.45, sev);
+  f.exert = Math.max(striking ? sev * ss(1.0, 1.8, swing) : 0, f.exert * Math.exp(-dt / 0.5));
+  setMoods(g, { stern: stern * gA, calm: calm * (1 - ease) * gA, focus: (1 - 0.6 * stern) * (1 - ease) * gA, exertion: f.exert * gA, ease: ease * gA });
+
+  // Flinch: the subject's head tosses on contact.
+  f.flinch = f.wince * sA;
+}
+// The subject's head and neck, after the pose: a glance at the disciplinarian's face and the flinch (the hands and feet are
+// anchored, so these are small and the neck and head only; less where the hands are on the head).
+const _fa = new THREE.Vector3(), _fw = new THREE.Vector3(), _fu = new THREE.Vector3(0, 1, 0);
+function faceBody(scn) {
+  const f = scn.fx, s = scn.s, g = scn.g;
+  if (!f) return;
+  const cap = FACE.SUBJ_HEAD_CAP * (scn.atHead ? 0.4 : 1);
+  if (f.sGw > 0.01) lookAt(s, g.bones.head.getWorldPosition(_fw), cap * f.sGw);
+  if (f.flinch > 0.02) {
+    const fwd = _fa.set(0, 0, 1).applyQuaternion(s.bones.head.getWorldQuaternion(new THREE.Quaternion()));
+    const ax = fwd.clone().cross(_fu);
+    if (ax.lengthSq() > 1e-6) rotateBoneWorld(s.bones.head, new THREE.Quaternion().setFromAxisAngle(ax.normalize(), FACE.HEAD_FLINCH * (scn.atHead ? 0.5 : 1) * f.flinch));
+  }
+}
+// Where the eyes go: the disciplinarian's to the target, drifting to the subject's face as they glance; the subject's
+// to the disciplinarian's face when they glance. Set after the heads have turned, so the eyes make up what's left.
+function faceGaze(scn, target) {
+  const f = scn.fx, g = scn.g, s = scn.s;
+  if (!f) return;
+  const eyes = (ch, point, w) => {
+    const hq = ch.bones.head.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const v = point.clone().sub(ch.bones.head.getWorldPosition(new THREE.Vector3())).applyQuaternion(hq).normalize();
+    ch.gazeFx = { x: clamp(v.x * FACE.EYE_GAIN, -1, 1), y: clamp(v.y * FACE.EYE_GAIN, -1, 1), w };
+  };
+  const sHead = s.bones.head.getWorldPosition(new THREE.Vector3()), gHead = g.bones.head.getWorldPosition(new THREE.Vector3());
+  eyes(g, target.clone().lerp(sHead, f.gGw), 0.85);
+  s.gazeFx = null;
+  if (f.sGw > 0.01) eyes(s, gHead, f.sGw);
+}
+
 function updateScene(scn, dt) {
   const g = scn.g, s = scn.s;
   if (!g || !s) return;
@@ -3138,6 +3258,7 @@ function updateScene(scn, dt) {
   // The pain model: time spent waiting with the arm raised (dread), and time the hand stays on the skin after a smack.
   if (Math.abs(swing - 1) < 0.05) scn.raisedT += dt;
   if (scn.pain) scn.pain.update(dt, swing > 1.95);
+  if (scn.faces) faceState(scn, dt);
   // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
   // subject's hips as the arm comes up (about the vertical through the pelvis, so the feet stay put).
   if (scn.atHead) {
@@ -3169,6 +3290,7 @@ function updateScene(scn, dt) {
   if (scn.atKnees) kneesBody(scn, scn.reaction);
   s.group.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
+  if (scn.faces) { faceBody(scn); s.group.updateMatrixWorld(true); }
 
   // Contact points: mesh vertices chosen at build time (see sceneAnchors), taken
   // through full skinning each frame, so the palm sits on the skin as rendered.
@@ -3509,7 +3631,9 @@ function updateScene(scn, dt) {
   // Capped low so the face stays readable from the front; the eyes imply the rest.
   // `scn.gaze = 'head'` turns the look to the back of the subject's head instead (aftercare).
   if (scn.gaze === 'head') lookAt(g, s.bones.head.getWorldPosition(new THREE.Vector3()), 0.7);
+  else if (scn.faces && scn.fx && scn.fx.gGw > 0.01) lookAt(g, glute.p.clone().lerp(s.bones.head.getWorldPosition(new THREE.Vector3()), scn.fx.gGw), lerp(0.42, FACE.GIVER_HEAD_CAP, scn.fx.gGw));
   else lookAt(g, glute.p, 0.42);
+  scn._glutePt = glute.p;
   // Over the case, the paddle's contact twists the back, so the look is trimmed back toward the subject.
   if (scn.atCase && !scn.atHead && scn.tool && scn.tool.wide && swing > 1) {
     const w = clamp(swing - 1, 0, 1);
@@ -3660,6 +3784,7 @@ function updateScene(scn, dt) {
   // are round the handle, and the implement presses the skin through the palm's press).
   setFingerCaps(s, g, 'L', 1);
   if (!tool) setFingerCaps(s, g, 'R', clamp((swing - 1.75) / 0.25, 0, 1), true);
+  if (scn.faces && scn._glutePt) { g.group.updateMatrixWorld(true); faceGaze(scn, scn._glutePt); }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -5703,10 +5828,10 @@ function bustContact(ch, everyone) {
 
 global.Starlight = {
   PRESETS, ORDER, FACE_DEFAULTS, faceParams, BONES, POSES, clone, SKIN, BRA_STYLES, lookLayers, dress, setSkin,
-  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
+  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, setMoods, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createPain, PAIN, clothCushion, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createPain, PAIN, clothCushion, FACE, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
