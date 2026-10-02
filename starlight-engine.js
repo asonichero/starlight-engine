@@ -2371,13 +2371,13 @@ const PAIN = {
   TENDER: 0.6,                           // fully marked skin hurts this much more
   // What clothing takes off the sting (the sharp part; the deep ache goes through cloth untouched): by garment, stacking.
   CUSHION: { thong: 0.03, briefs: 0.12, trunks: 0.15, leggings: 0.25, shorts: 0.35, trousers: 0.4, skirt: 0.2 }, CUSHION_MAX: 0.7,
-  CAP: 160,                              // the capacity at tolerance 0.5 is CAP × (0.6 + 0.8 × tolerance)
+  CAP: 70,                               // the capacity at tolerance 0.5 is CAP × (0.7 + 0.6 × tolerance)
   BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [Infinity, 'at their limit']],
 };
 function createPain(stats = {}) {
   const st = { tolerance: 0.5, resilience: 0.5, ...stats };
   const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atLimit: false, peak: 0 };
-  P.capacity = () => PAIN.CAP * (0.6 + 0.8 * st.tolerance);
+  P.capacity = () => PAIN.CAP * (0.7 + 0.6 * st.tolerance);
   P.level = () => P.sting + P.ache;
   P.distress = () => P.level() / P.capacity();
   P.band = () => PAIN.BANDS.find(([max]) => P.distress() < max)[1];
@@ -3157,10 +3157,10 @@ function faceState(scn, dt) {
   f.wince *= Math.exp(-dt / FACE.WINCE_TAU); f.heat *= Math.exp(-dt / FACE.HEAT_TAU);
   const d = P ? P.distress() : 0;
   const sev = scn.severity != null ? scn.severity : clamp(0.75 * (scn.lastStrength != null ? scn.lastStrength : 0.5) + 0.25 * clamp((scn.timing.speed - 0.6) / 1.0, 0, 1), 0, 1);
-  const L = clamp(f.heat * 0.85 + d * 1.3, 0, 1);     // how worked up they look
+  const L = clamp(f.heat * 0.85 + d * 1.6, 0, 1);     // how worked up they look
   const tol = P ? P.stats.tolerance : (s.spec.m.tolerance != null ? s.spec.m.tolerance : 0.5);
   // The subject's mask: stoic holds until near the limit; low tolerance shows early.
-  const sA = clamp((1 - 0.45 * clamp((tol - 0.4) / 0.4, 0, 1) * (1 - ss(0.55, 0.95, L))) * (1 + 0.25 * clamp((0.5 - tol) / 0.3, 0, 1)) * (s.spec.m.expressive != null ? s.spec.m.expressive : 1), 0, 1.15);
+  const sA = clamp((1 - 0.35 * clamp((tol - 0.4) / 0.4, 0, 1) * (1 - ss(0.25, 0.6, L))) * (1 + 0.25 * clamp((0.5 - tol) / 0.3, 0, 1)) * (s.spec.m.expressive != null ? s.spec.m.expressive : 1), 0, 1.15);
   const gA = clamp(g.spec.m.expressive != null ? g.spec.m.expressive : 1, 0, 1.2);
 
   // A smack landed.
@@ -3190,7 +3190,7 @@ function faceState(scn, dt) {
   // Subject moods.
   const dread = ss(0.45, 1, swing) * (swing <= 1.02 ? 1 : 1 - ss(1.02, 1.35, swing)) * (0.45 + 0.55 * Math.min(1, scn.raisedT / 0.9));
   const exhale = ss(0.7, 1.2, f.since) * (1 - ss(1.8, 2.8, f.since)) * (0.3 + 0.7 * Math.min(1, L * 2)) * (1 - dread);
-  setMoods(s, { dread: dread * (0.6 + 0.4 * sA), wince: f.wince * sA, strain: ss(0.22, 0.55, L) * sA, distress: ss(0.5, 0.95, L) * sA, exhale: exhale * sA });
+  setMoods(s, { dread: dread * (0.6 + 0.4 * sA), wince: f.wince * sA, strain: ss(0.12, 0.4, L) * sA, distress: ss(0.3, 0.75, L) * sA, exhale: exhale * sA });
   // Disciplinarian moods.
   const stern = ss(0.35, 0.85, sev) * (1 - ease), calm = 1 - ss(0.1, 0.45, sev);
   f.exert = Math.max(striking ? sev * ss(1.0, 1.8, swing) : 0, f.exert * Math.exp(-dt / 0.5));
