@@ -132,8 +132,28 @@ const PRESETS = {
     looks: { Underwear: ['briefs'], Rehearsal: ['briefs', 'bottom', 'top', 'shoes'] },
     look: 'Rehearsal',
   },
+  haru: {
+    name: 'Haru', expressive: 1.2, build: 'male', tolerance: 0.45, resilience: 0.5, height: 160.5, legs: 1.06, shoulders: 38,
+    bust: 82, underbust: 76, waist: 67, hip: 85,
+    neck: 31, arm: 24.5, forearm: 22, wrist: 15,
+    thigh: 45, knee: 32, calf: 31, ankle: 20, glutes: 1.1, head: 1.04,
+    eye: 1.32, eyeGap: 1.04, brow: 0.3, nose: 1.0, lips: 0.9, mouth: 0.95, youth: 0.35, jaw: 1.0, chin: 0.98,
+    // Unsure but graceful: wide, bright eyes with the brows lifted and drawn a little together, gaze resting slightly
+    // down and to one side, eyes that wander and don't hold contact for long; the mouth a touch down at the corners.
+    expr: { browInner: 0.45, browOuter: 0.1, lidUpper: 0.4, gazeX: -0.15, gazeY: -0.12, mouthL: -0.05, mouthR: -0.02, saccade: 0.6, contact: 0.35, blink: 1.15 },
+    skin: 0xe9c6a5,
+    outfit: { hair: 0x2a1d14, hairStyle: 'short' },
+    wardrobe: {
+      briefs: { kind: 'briefs', name: 'Blue trunks', color: 0x2c5fcf, rise: 0.5, leg: 0.06 },
+      bottom: { kind: 'bottom', name: 'Khaki work trousers', color: 0xa39469, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'White T-shirt', color: 0xf2f0ea, from: 'hip', sleeves: 0.45 },
+      shoes:  { kind: 'shoes', name: 'Work boots', color: 0x4a3524 },
+    },
+    looks: { Underwear: ['briefs'], Rehearsal: ['briefs', 'bottom', 'top', 'shoes'] },
+    look: 'Rehearsal',
+  },
 };
-const ORDER = ['aya', 'rin', 'kiko', 'kenji'];
+const ORDER = ['aya', 'rin', 'kiko', 'kenji', 'haru'];
 // Face shape, as multipliers of each build's base face (1 = unchanged) except brow
 // hump, tipTilt, mouthHeight and eyeHeight (−1…1). A preset can set any of them; the rest take these defaults.
 // eye: eye size; eyeGap: spacing between the eyes.
