@@ -2311,20 +2311,20 @@ function handsOnHead(ch) {
 // ════════════════════════════════════════════════════════════════
 const PAIN = {
   // base: pain of a full-strength smack at standard speed; sting: the share that is sharp (fades fast).
-  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.2, sting: 0.65 }, rod: { base: 1.4, sting: 0.9 }, paddle: { base: 1.2, sting: 0.3 } },
-  TAU_STING: 3.0, TAU_ACHE: 24,          // seconds for the sting and the ache to fall by 1/e, at resilience 0.5
+  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.2, sting: 0.65 }, rod: { base: 1.7, sting: 0.85 }, paddle: { base: 1.2, sting: 0.3 } },
+  TAU_STING: 3.0, TAU_ACHE: 120,         // seconds for the sting and the ache to fall by 1/e, at resilience 0.5
   RESIST: 0.5,                          // resilience takes up to this share off every smack
   SPEED_EXP: 1.0,                        // pain ∝ speed ^ this
   ANTIC_MAX: 0.6, ANTIC_TAU: 1.0,        // dread adds up to this share, building over this many seconds of waiting
   DWELL_RATE: 0.9, DWELL_MAX: 2.0,      // staying on the skin adds this share of the smack per second, up to this many seconds
   TENDER: 0.6,                           // fully marked skin hurts this much more
-  CAP: 8.0,                              // the capacity at tolerance 0.5 is CAP × (0.4 + 1.2 × tolerance)
+  CAP: 160,                              // the capacity at tolerance 0.5 is CAP × (0.6 + 0.8 × tolerance)
   BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [Infinity, 'at their limit']],
 };
 function createPain(stats = {}) {
   const st = { tolerance: 0.5, resilience: 0.5, ...stats };
   const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atLimit: false, peak: 0 };
-  P.capacity = () => PAIN.CAP * (0.4 + 1.2 * st.tolerance);
+  P.capacity = () => PAIN.CAP * (0.6 + 0.8 * st.tolerance);
   P.level = () => P.sting + P.ache;
   P.distress = () => P.level() / P.capacity();
   P.band = () => PAIN.BANDS.find(([max]) => P.distress() < max)[1];

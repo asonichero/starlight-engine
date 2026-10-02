@@ -48,6 +48,7 @@
   <div class="row2"><label><span>Strike speed</span><span id="v-speed"></span></label><input type="range" id="s-speed" min="0.5" max="2" step="0.05"></div>
   <div class="row2"><label><span>Hold before the swing</span><span id="v-hold"></span></label><input type="range" id="s-hold" min="0" max="3" step="0.05"></div>
   <div class="row2"><label><span>Hold after contact</span><span id="v-dwell"></span></label><input type="range" id="s-dwell" min="0" max="3" step="0.05"></div>
+  <div class="row2"><label><span>Smacks</span><span id="v-count"></span></label><input type="range" id="s-count" min="1" max="400" step="1"></div>
   <h3>Subject's limits</h3>
   <div class="row2"><label><span>Tolerance</span><span id="v-tol"></span></label><input type="range" id="s-tol" min="0.05" max="1" step="0.01"></div>
   <div class="row2"><label><span>Resilience</span><span id="v-res"></span></label><input type="range" id="s-res" min="0.05" max="1" step="0.01"></div>
@@ -91,9 +92,9 @@ const CAMERA = {
 };
 const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true, stopAtLimit: true };
 // The strike settings (start from the severity, then follow the sliders) and each character's own limits (start from their preset).
-const strike = { speed: 1, hold: 0.3, dwell: 0.6 };
+const strike = { speed: 1, hold: 0.3, dwell: 0.6, count: 12 };
 const stats = {}; ORDER.forEach(k => stats[k] = { tolerance: PRESETS[k].tolerance, resilience: PRESETS[k].resilience });
-function fromSeverity() { const v = SEVERITY[sel.severity]; strike.speed = v.speed; strike.hold = v.hold; strike.dwell = v.dwell; }
+function fromSeverity() { const v = SEVERITY[sel.severity]; strike.speed = v.speed; strike.hold = v.hold; strike.dwell = v.dwell; strike.count = v.count; }
 fromSeverity();
 let scn = null, running = false, done = 0, since = 0, total = 0;
 
@@ -187,7 +188,7 @@ function startRun() {
   if (!scn) return;
   const v = SEVERITY[sel.severity];
   scn.timing = { ...scn.timing, speed: strike.speed };
-  running = true; done = 0; since = 0; total = v.count; Sound.init();
+  running = true; done = 0; since = 0; total = strike.count; Sound.init();
   document.getElementById('go').textContent = 'Stop'; document.getElementById('go').classList.add('running');
   updateStatus();
 }
@@ -223,11 +224,11 @@ function refresh() {
   document.getElementById('sound').classList.toggle('on', sel.sound);
   document.getElementById('stoplimit').classList.toggle('on', sel.stopAtLimit);
   const set = (id, v, f) => { document.getElementById('s-' + id).value = v; document.getElementById('v-' + id).textContent = f(v); };
-  set('speed', strike.speed, v => v.toFixed(2) + '×'); set('hold', strike.hold, v => v.toFixed(2) + ' s'); set('dwell', strike.dwell, v => v.toFixed(2) + ' s');
+  set('count', strike.count, v => v + ''); set('speed', strike.speed, v => v.toFixed(2) + '×'); set('hold', strike.hold, v => v.toFixed(2) + ' s'); set('dwell', strike.dwell, v => v.toFixed(2) + ' s');
   const st = stats[sel.subject]; set('tol', st.tolerance, v => v.toFixed(2)); set('res', st.resilience, v => v.toFixed(2));
 }
-for (const [id, key] of [['speed', 'speed'], ['hold', 'hold'], ['dwell', 'dwell']]) document.getElementById('s-' + id).oninput = e => {
-  strike[key] = +e.target.value; if (key === 'speed' && scn) scn.timing = { ...scn.timing, speed: strike.speed }; refresh();
+for (const [id, key] of [['count', 'count'], ['speed', 'speed'], ['hold', 'hold'], ['dwell', 'dwell']]) document.getElementById('s-' + id).oninput = e => {
+  strike[key] = +e.target.value; if (key === 'count') total = strike.count; if (key === 'speed' && scn) scn.timing = { ...scn.timing, speed: strike.speed }; refresh();
 };
 for (const [id, key] of [['tol', 'tolerance'], ['res', 'resilience']]) document.getElementById('s-' + id).oninput = e => { stats[sel.subject][key] = +e.target.value; refresh(); };
 document.getElementById('stoplimit').onclick = () => { sel.stopAtLimit = !sel.stopAtLimit; refresh(); };
@@ -240,7 +241,7 @@ chooser('p-position', POSITIONS, 'position', p => {
   refresh(); build();
 });
 chooser('p-implement', IMPLEMENTS, 'implement', n => { sel.implement = n; refresh(); if (scn) { scn.setImplement(n); scn.setBeat('relaxed'); } });
-chooser('p-severity', SEVERITY.map((v, i) => [i, v.name]), 'severity', i => { sel.severity = i; fromSeverity(); refresh(); if (running) { scn.timing = { ...scn.timing, speed: strike.speed }; total = SEVERITY[i].count; updateStatus(); } });
+chooser('p-severity', SEVERITY.map((v, i) => [i, v.name]), 'severity', i => { sel.severity = i; fromSeverity(); refresh(); if (running) { scn.timing = { ...scn.timing, speed: strike.speed }; total = strike.count; updateStatus(); } });
 document.getElementById('c-bottoms').onclick = () => { sel.bottoms = !sel.bottoms; refresh(); build(); };
 document.getElementById('c-briefs').onclick = () => { sel.briefs = !sel.briefs; refresh(); build(); };
 document.getElementById('sound').onclick = () => { sel.sound = !sel.sound; refresh(); };
