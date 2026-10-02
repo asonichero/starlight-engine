@@ -98,6 +98,8 @@
   <div class="tabs" id="sc-giver"></div>
   <div class="sub" style="margin:8px 0 3px">Subject</div>
   <div class="tabs" id="sc-subject"></div>
+  <div class="sub" style="margin:8px 0 3px">Position</div>
+  <div class="tabs" id="sc-position"></div>
   <div class="sub" style="margin:8px 0 3px">Beat</div>
   <div class="poses" id="sc-beats"></div>
   <div class="row" style="margin-top:8px"><label><span>Swing speed</span><span id="v-t-speed">1.00×</span></label><input id="s-t-speed" type="range" min="0.25" max="3" step="0.05" value="1"></div>
@@ -150,7 +152,10 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="starlight-engine.js"></script>
+<script>
+// The engine changes often; always fetch it fresh so a cached copy never hides a change.
+document.write('<script src="starlight-engine.js?v=' + Date.now() + '"><\/script>');
+</script>
 <script>
 (function () {
 'use strict';
@@ -188,6 +193,9 @@ ORDER.forEach(k => current[k] = clone(PRESETS[k]));
 const lin = S.lin;
 const viewEl = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// A phone's GPU can refuse a shader and the skin just doesn't draw: say why on screen (also shown with ?gl in the address).
+(() => { const b = document.createElement('div'); b.id = 'glbanner'; b.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:50;background:#5a1f1f;color:#ffd9d9;font:12px/1.4 monospace;padding:8px 10px;border-radius:6px;white-space:pre-wrap;display:none;max-height:40vh;overflow:auto'; b.onclick = () => b.style.display = 'none'; document.body.appendChild(b);
+  S.watchGL(renderer, msg => { b.textContent = msg; b.style.display = 'block'; }); })();
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(viewEl.clientWidth, viewEl.clientHeight);
 renderer.shadowMap.enabled = true;
@@ -226,7 +234,7 @@ scene.add(floor);
 const view = { lineup: false, skeleton: false, weights: false, wire: false, spin: false, voxel: 0.010, pose: 'Relaxed', selected: 'aya' };
 let chars = {};
 // Discipline scene settings (applied to the engine's scene state when it's built).
-const sc = { sound: true, implement: 'hand', on: false, giver: 'aya', subject: 'kiko', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
+const sc = { sound: true, position: 'lap', implement: 'hand', on: false, giver: 'aya', subject: 'kiko', beat: 'relaxed', loop: false, side: 'L', timing: { ...S.DEFAULT_TIMING }, palmAim: 0.65 };
 let scn = null;   // the engine's scene state while shown
 // Pose editor state (see POSE EDITOR); while `on`, the scene is frozen and edited by hand.
 const PE = { on: false };
@@ -638,6 +646,11 @@ const Sound = (() => {
       burst(t, 0.04, 3600, 1.0 * k); burst(t + 0.004, 0.06, 700, 0.55 * k);
       return;
     }
+    if (sc.implement === 'rod') {
+      // A thin bar: a high, sharp whip-crack with little body.
+      burst(t, 0.03, 4800, 1.0 * k); burst(t + 0.002, 0.05, 1500, 0.4 * k);
+      return;
+    }
     if (sc.implement === 'paddle') {
       // A broad board: a full, heavy crack with a deep body under it.
       burst(t, 0.07, 2000, 1.1 * k); burst(t + 0.003, 0.11, 420, 0.8 * k); burst(t + 0.006, 0.05, 4200, 0.35 * k);
@@ -655,7 +668,7 @@ function buildScene() {
   const g = build(sc.giver), s = build(sc.subject);
   for (const c of [g, s]) { if (chars[c.key]) S.copyMarks(chars[c.key], c); if (moodSel[c.key] && moodSel[c.key] !== 'none') S.setMood(c, moodSel[c.key]); }
   for (const c of [g, s]) { scene.add(c.group); scene.add(c.helper); applyViewToChar(c); }
-  scn = S.createDisciplineScene(scene, g, s, { lower: !!lowered[sc.subject] });
+  scn = S.createDisciplineScene(scene, g, s, { lower: !!lowered[sc.subject], position: sc.position });
   if (lowered[sc.giver]) S.setLowered(g, 'bottom', true);
   for (const c of [g, s]) if (briefsDown[c.key]) S.setLowered(c, 'briefs', true);
   scn.onImpact = (side, strength) => Sound.clap(strength);
@@ -711,6 +724,27 @@ document.getElementById('sc-on').onclick = () => {
   else { clearScene(); camera.position.set(1.2, 1.25, 3.2); }
   placeChars(); refreshSceneUI();
 };
+// Positions: across the lap, bent over the flight case with palms flat on it, or standing with hands on head.
+[['lap', 'Across the lap'], ['case', 'Over the case'], ['head', 'Hands on head'], ['knees', 'Hands on knees'], ['spread', 'Bent over, feet spread']].forEach(([id, label]) => {
+  const b = document.createElement('button');
+  b.textContent = label; b.dataset.pos = id;
+  b.onclick = () => {
+    if (sc.position === id || !POSITIONS_OK) return;
+    sc.position = id;
+    if (sc.on) buildScene();
+    refreshPositions();
+  };
+  document.getElementById('sc-position').appendChild(b);
+});
+// A browser holding an older cached starlight-engine.js would silently ignore the position.
+const POSITIONS_OK = !!S.POSITIONS;
+function refreshPositions() {
+  // Spread feet: dual-strike implements only (see IMPLEMENTS.dual).
+  if (sc.position === 'spread' && !S.IMPLEMENTS[sc.implement].dual) { sc.implement = Object.keys(S.IMPLEMENTS).find(n => S.IMPLEMENTS[n].dual) || 'hand'; if (scn) scn.setImplement(sc.implement); }
+  document.querySelectorAll('#sc-implements button').forEach(b => { b.disabled = sc.position === 'spread' && !S.IMPLEMENTS[b.dataset.impl].dual; });
+  document.querySelectorAll('#sc-position button').forEach(b => { b.classList.toggle('on', b.dataset.pos === sc.position); if (!POSITIONS_OK && b.dataset.pos !== 'lap') { b.disabled = true; b.title = 'starlight-engine.js is out of date: reload without the cache (Ctrl+Shift+R)'; } });
+  if (typeof refreshImplements === 'function') refreshImplements();
+}
 // Implements (engine IMPLEMENTS): what the disciplinarian holds.
 Object.keys(S.IMPLEMENTS).forEach(name => {
   const b = document.createElement('button');
@@ -720,7 +754,7 @@ Object.keys(S.IMPLEMENTS).forEach(name => {
   document.getElementById('sc-implements').appendChild(b);
 });
 function refreshImplements() { document.querySelectorAll('#sc-implements button').forEach(b => b.classList.toggle('on', b.dataset.impl === sc.implement)); }
-refreshImplements();
+refreshImplements(); refreshPositions();
 document.getElementById('sc-sound').onclick =e => { sc.sound = !sc.sound; e.target.classList.toggle('on', sc.sound); };
 // One smack at a time (as in the game): lift, strike the next side, hold on contact.
 document.getElementById('sc-smack').onclick = () => { if (!scn) return; if (PE.on) PE.stop(); if (sc.loop) { sc.loop = false; scn.setLoop(false); refreshSceneUI(); } if (!scn.busy()) scn.cycle(); };
@@ -836,7 +870,7 @@ function basis(x, z) {
 }
 
 const peWide = () => !!(scn && scn.tool && scn.tool.wide);
-const peKey = () => [sc.giver, sc.subject, sc.implement, sc.beat, sc.beat === 'contact' && !peWide() ? sc.side : ''].join('|');
+const peKey = () => [sc.position, sc.giver, sc.subject, sc.implement, sc.beat, sc.beat === 'contact' && !peWide() ? sc.side : ''].join('|');
 function peLabel() {
   const side = sc.beat !== 'contact' ? '' : peWide() ? ' (both sides)' : sc.side === 'L' ? ' (left)' : ' (right)';
   const impl = document.querySelector(`#sc-implements button[data-impl="${sc.implement}"]`).textContent;
@@ -1156,7 +1190,7 @@ PE.settle = () => {
   for (let i = 0; i < 60; i++) scn.update(0.05);
   PE.base = { ...snapState({ table: true, clear: true }), scn };
   PE.key = peKey(); PE.label = peLabel();
-  PE.ctx = { giver: sc.giver, subject: sc.subject, implement: sc.implement, beat: sc.beat, side: sc.side, palmAim: sc.palmAim };
+  PE.ctx = { position: sc.position, giver: sc.giver, subject: sc.subject, implement: sc.implement, beat: sc.beat, side: sc.side, palmAim: sc.palmAim };
   PE.press = grabPress();
   const saved = PE.saved[PE.key];
   if (saved) applyState(saved.edit);
@@ -1196,7 +1230,7 @@ function peReport() {
   if (!recs.length) L.push('Nothing edited yet. Turn on Edit pose to start.');
   for (const [, R] of recs) {
     const { base: A, edit: B, ctx } = R, D = peDiff(A, B);
-    L.push(`== ${R.label} ==`, `Disciplinarian ${PRESETS[ctx.giver].name}, subject ${PRESETS[ctx.subject].name}, palm angle ${Math.round(ctx.palmAim * 100)}%.`);
+    L.push(`== ${R.label} ==`, `${ctx.position === 'case' ? 'Over the case. ' : ''}Disciplinarian ${PRESETS[ctx.giver].name}, subject ${PRESETS[ctx.subject].name}, palm angle ${Math.round(ctx.palmAim * 100)}%.`);
     for (const who of ['g', 's']) {
       const bones = D.bones.filter(x => x[0] === who).map(x => x[1]);
       const moved = D.moved.includes(who);

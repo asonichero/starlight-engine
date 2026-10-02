@@ -32,7 +32,7 @@
 // from the full underwear base layer, and the clothes go over it.
 const PRESETS = {
   aya: {
-    name: 'Aya', build: 'female', height: 172, legs: 1.02, shoulders: 38,
+    name: 'Aya', expressive: 1.1, build: 'female', tolerance: 0.75, resilience: 0.6, height: 172, legs: 1.02, shoulders: 38,
     bust: 86, underbust: 72, waist: 63, hip: 100.5,
     neck: 31, arm: 25, forearm: 22, wrist: 14.5,
     thigh: 52, knee: 34, calf: 33, ankle: 20.5, cup: 3, glutes: 1.32, head: 1.0,
@@ -59,7 +59,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   rin: {
-    name: 'Rin', build: 'female', height: 163, legs: 1.05, shoulders: 37,
+    name: 'Rin', expressive: 1.0, build: 'female', tolerance: 0.5, resilience: 0.55, height: 163, legs: 1.05, shoulders: 37,
     bust: 75.5, underbust: 68, waist: 62.5, hip: 87.5,
     neck: 26, arm: 23, forearm: 19, wrist: 13.5,
     thigh: 38, knee: 28, calf: 26, ankle: 19.5, cup: 2, glutes: 1.4, head: 1.04,
@@ -85,7 +85,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kiko: {
-    name: 'Kiko', build: 'female', height: 158, legs: 1.04, shoulders: 35,
+    name: 'Kiko', expressive: 1.1, build: 'female', tolerance: 0.35, resilience: 0.45, height: 158, legs: 1.04, shoulders: 35,
     bust: 86, underbust: 60, waist: 64.5, hip: 93.5,
     neck: 26, arm: 30, forearm: 21, wrist: 14,
     thigh: 49.5, knee: 32.5, calf: 27.5, ankle: 20, cup: 4, glutes: 1.4, head: 1.1,
@@ -112,7 +112,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kenji: {
-    name: 'Kenji', build: 'male', height: 181.5, legs: 1.02, shoulders: 45,
+    name: 'Kenji', expressive: 0.6, build: 'male', tolerance: 0.65, resilience: 0.7, height: 181.5, legs: 1.02, shoulders: 45,
     bust: 96, underbust: 90, waist: 80, hip: 94,
     neck: 38, arm: 32.5, forearm: 27, wrist: 17,
     thigh: 54, knee: 38, calf: 37, ankle: 23, glutes: 1.4, head: 1.0,
@@ -132,8 +132,28 @@ const PRESETS = {
     looks: { Underwear: ['briefs'], Rehearsal: ['briefs', 'bottom', 'top', 'shoes'] },
     look: 'Rehearsal',
   },
+  haru: {
+    name: 'Haru', expressive: 1.2, build: 'male', tolerance: 0.45, resilience: 0.5, height: 160.5, legs: 1.06, shoulders: 38,
+    bust: 82, underbust: 76, waist: 67, hip: 85,
+    neck: 31, arm: 24.5, forearm: 22, wrist: 15,
+    thigh: 45, knee: 32, calf: 31, ankle: 20, glutes: 1.1, head: 1.04,
+    eye: 1.32, eyeGap: 1.04, brow: 0.3, nose: 1.0, lips: 0.9, mouth: 0.95, youth: 0.35, jaw: 1.0, chin: 0.98,
+    // Unsure but graceful: wide, bright eyes with the brows lifted and drawn a little together, gaze resting slightly
+    // down and to one side, eyes that wander and don't hold contact for long; the mouth a touch down at the corners.
+    expr: { browInner: 0.45, browOuter: 0.1, lidUpper: 0.4, gazeX: -0.15, gazeY: -0.12, mouthL: -0.05, mouthR: -0.02, saccade: 0.6, contact: 0.35, blink: 1.15 },
+    skin: 0xe9c6a5,
+    outfit: { hair: 0x2a1d14, hairStyle: 'short' },
+    wardrobe: {
+      briefs: { kind: 'briefs', name: 'Blue trunks', color: 0x2c5fcf, rise: 0.5, leg: 0.06 },
+      bottom: { kind: 'bottom', name: 'Khaki work trousers', color: 0xa39469, legLen: 2.0, lowerTo: 'ankle' },
+      top:    { kind: 'top', name: 'White T-shirt', color: 0xf2f0ea, from: 'hip', sleeves: 0.45 },
+      shoes:  { kind: 'shoes', name: 'Work boots', color: 0x4a3524 },
+    },
+    looks: { Underwear: ['briefs'], Rehearsal: ['briefs', 'bottom', 'top', 'shoes'] },
+    look: 'Rehearsal',
+  },
 };
-const ORDER = ['aya', 'rin', 'kiko', 'kenji'];
+const ORDER = ['aya', 'rin', 'kiko', 'kenji', 'haru'];
 // Face shape, as multipliers of each build's base face (1 = unchanged) except brow
 // hump, tipTilt, mouthHeight and eyeHeight (−1…1). A preset can set any of them; the rest take these defaults.
 // eye: eye size; eyeGap: spacing between the eyes.
@@ -338,12 +358,17 @@ function ringFromCirc(C, [aspect, fb, bb]) {
 // Fingers, index to little: [offset across the palm in pitches, length × hand
 // length, radius × height, knuckle set back toward the wrist × hand length].
 const FINGERS = [[1.45, 0.40, 0.0043, 0.012], [0.48, 0.44, 0.0046, 0], [-0.48, 0.42, 0.0044, 0.012], [-1.42, 0.33, 0.0039, 0.05]];
+const CAPS = 16;               // finger capsules the skin shader can press against
 const FINGER_PITCH = 0.0103;    // × height
 const FINGER_ROOT = 0.56;       // knuckle line, × hand length from the wrist
 // Thumb (rigid, on the hand bone), base to tip: [along the hand × hand length, toward the
 // palm side × height, toward the thumb side × height, radius × height].
 const THUMB = [[0.1, 0, 0.012, 0.0064], [0.36, 0.003, 0.027, 0.0054], [0.68, 0.006, 0.031, 0.0044]];
 
+// The pelvis carries the crotch skin above this band (heights above the crotch point, × body height), handing over to
+// the thighs below it. Raised from -0.004/0.02: bent over with the legs straight, the thigh-carried skin at the crotch
+// stood out as a flat flap between the glutes.
+const CROTCH_LO = 0.05, CROTCH_HI = 0.09;
 function buildSpec(m) {
   const H = m.height / 100, L = m.legs, cm = v => v / 100;
   const R = C => cm(C) / (2 * Math.PI);          // radius from circumference
@@ -1350,7 +1375,7 @@ function buildMesh(spec, h) {
     // stay entirely with their legs.
     if (p[1] < spec.J.thighL[1]) {
       const hx = spec.J.thighL[0], cy = crotchY(spec);
-      const give = (1 - smooth01(0.2 * hx, 0.6 * hx, Math.abs(p[0]))) * smooth01(cy - 0.004 * spec.H, cy + 0.02 * spec.H, p[1]);
+      const give = (1 - smooth01(0.2 * hx, 0.6 * hx, Math.abs(p[0]))) * smooth01(cy + CROTCH_LO * spec.H, cy + CROTCH_HI * spec.H, p[1]);
       for (const t of ['thighL', 'thighR']) if (acc[t] && give > 0) { acc.pelvis = (acc.pelvis || 0) + acc[t] * give; acc[t] *= 1 - give; }
     }
     cand.sort((a, b) => b[1] - a[1]);
@@ -1416,15 +1441,19 @@ function makeBodyMaterial(m) {
     // Second slot, for the resting left hand (same rule).
     uPressP2: { value: new THREE.Vector3() }, uPressN2: { value: new THREE.Vector3(0, 1, 0) },
     uPressR2: { value: 0.06 }, uPressAmt2: { value: 0 },
+    // Fingers pressing the skin: up to CAPS capsules (mesh-local; A = start xyz + radius, B = end xyz
+    // + how far in contact, 0–1). Skin inside one is pushed in along its own normal until it
+    // clears the finger, so a pad dents the flesh the way the palm plane does.
+    uCapA: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapB: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapN: { value: 0 },
     // Contact: the partner's posed proxies (see CONTACT; set by updateContacts).
-    uCE: { value: Array.from({ length: CONTACT_ELL * 4 }, () => new THREE.Vector4()) },
-    uCC: { value: Array.from({ length: CONTACT_CONE * 2 }, () => new THREE.Vector4()) },
-    uCSoft: { value: new Array(CONTACT_CONE).fill(0) },
+    uContactTex: { value: contactTexture() },
     uContactN: { value: new THREE.Vector2() },
     // Marks (see addMark): per side, centre in rest space, strength and radius.
     uMarkP: { value: [new THREE.Vector3(), new THREE.Vector3()] }, uMarkAmt: { value: [0, 0] },
     uMarkReach: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
     uMarkRegion: { value: new THREE.Vector4() }, uMarkCol: { value: lin(MARK_COLOR) },
+    // Stripes (the rod; see addStripe): rest-space heights and their strength.
+    uStripe: { value: Array.from({ length: 32 }, () => new THREE.Vector4()) }, uStripeN: { value: 0 },
     // Lip colour: the skin warmed toward a rose, less on male builds (or preset lipColor).
     uLipCol: { value: m.lipColor != null ? lin(m.lipColor) : skin.clone().lerp(lin(0xa84a52), m.build === 'male' ? 0.22 : 0.62) },
     // The painted lips' shape in rest space (spec.mouth, set in buildCharacter):
@@ -1440,9 +1469,9 @@ function makeBodyMaterial(m) {
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;' + CONTACT_GLSL + FINGER_BEND_GLSL)
+      .replace('#include <common>', '#include <common>\nattribute vec4 layerA, layerB;\nattribute float hairCov, creaseD;\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nvarying vec3 vRest, vRestN;\nuniform vec3 uPressP, uPressN, uPressP2, uPressN2;\nuniform vec4 uPressAx;\nuniform float uPressR, uPressAmt, uPressR2, uPressAmt2, uPressDepth;\nuniform vec4 uCapA[' + CAPS + '], uCapB[' + CAPS + '];\nuniform float uCapN;' + CONTACT_GLSL + FINGER_BEND_GLSL)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 fbPos = vec3(position);\nbendFingers(fbPos, objectNormal);')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = fbPos;\nvLayerA = layerA; vLayerB = layerB; vHair = hairCov; vRest = position; vCrease = creaseD;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = fbPos;\nvLayerA = layerA; vLayerB = layerB; vHair = hairCov; vRest = position; vRestN = normal; vCrease = creaseD;')
       .replace('#include <skinning_vertex>', `#include <skinning_vertex>
         if (uPressAmt > 0.0) {
           vec3 dP = transformed - uPressP;
@@ -1476,9 +1505,23 @@ function makeBodyMaterial(m) {
             float flatQ = wQ * smoothstep(-0.004, 0.004, hQ);
             vNormal = normalize(mix(vNormal, normalize(normalMatrix * uPressN2), flatQ));
           #endif
+        }
+        // Fingers: skin inside a finger capsule is pushed in along its own normal until it
+        // clears the finger (a dent as deep as the finger is round), fading out past its edge.
+        for (int ci = 0; ci < ${CAPS}; ci++) {
+          if (float(ci) >= uCapN) break;
+          vec3 pa = uCapA[ci].xyz, ba = uCapB[ci].xyz - pa;
+          float rC = uCapA[ci].w;
+          float hh = clamp(dot(transformed - pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
+          vec3 dd = transformed - (pa + ba * hh);
+          float hN = dot(dd, objectNormal);                    // below the finger's axis is negative
+          float xx = length(dd - hN * objectNormal);
+          float dent = max(sqrt(max(rC * rC - xx * xx, 0.0)) + hN, 0.0);
+          float wC = (1.0 - smoothstep(rC * 0.9, rC * 1.35, xx)) * (1.0 - smoothstep(0.0, 0.6 * rC, hN)) * uCapB[ci].w;
+          transformed -= objectNormal * dent * wC;
         }` + CONTACT_VERTEX);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest, vRestN;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform vec4 uStripe[32];\nuniform float uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
       .replace('#include <color_fragment>', `
         // Each layer's edge distance, thresholded over about a pixel; innermost first.
         vec4 wa = fwidth(vLayerA) * 0.75 + 1e-5, wb = fwidth(vLayerB) * 0.75 + 1e-5;
@@ -1487,7 +1530,7 @@ function makeBodyMaterial(m) {
         // Marks (see addMark): each side's colour spreads from its centre as it deepens,
         // reaching the edge of the region (glute and top of thigh, behind) at full
         // strength. Painted into the skin, so clothing layers cover it.
-        float mk = 0.0;
+        float mk = 0.0; vec3 outfitStripe = uMarkCol;
         // Lower edge: follows the crease where each thigh meets the glute (vCrease, metres
         // along the thigh, negative on the thigh), full to just past it and fading out
         // gradually by uMarkRegion.w down the thigh, so it has no hard line.
@@ -1506,7 +1549,30 @@ function makeBodyMaterial(m) {
           float side = smoothstep(-0.012, 0.004, s * vRest.x) * (1.0 - smoothstep(uMarkRegion.z, uMarkRegion.z + 0.03, s * vRest.x));
           mk = max(mk, f * spread * side * inBand * behind);
         }
-        vec3 outfitCol = mix(uSkin, uMarkCol, mk);
+        // Stripes (the rod): where the bar touched (see addStripe): its height, its length across the body, and not the cleft it
+        // bridges; behind the body. They add where they overlap, and the colour goes red to purple as it deepens.
+        vec3 stripeCol = uMarkCol;
+        if (uStripeN > 0.0) {
+          float sadd = 0.0;
+          float rear = smoothstep(0.0, -0.025, vRest.z);
+          float cleft = smoothstep(0.006, 0.016, abs(vRest.x));
+          // Only the very top/back of the curve: where the surface faces straight back (so no wrapping round the sides).
+          rear *= smoothstep(0.6, 0.8, -vRestN.z);
+          for (int si = 0; si < 32; si++) {
+            if (float(si) >= uStripeN) break;
+            vec4 st = uStripe[si];   // y, strength, x0, x1
+            float dy = abs(vRest.y - st.x);
+            float inx = smoothstep(st.z - 0.004, st.z + 0.006, vRest.x) * (1.0 - smoothstep(st.w - 0.006, st.w + 0.004, vRest.x));
+            sadd += st.y * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
+          }
+          sadd *= rear * cleft;
+          // Added on top of whatever marks are already there (a more localised deepening of the same colour), and the red deepens
+          // as the total builds.
+          mk = min(1.0, mk + sadd);
+          stripeCol = mix(uMarkCol, uMarkCol * vec3(0.45, 0.35, 0.4), smoothstep(0.35, 0.95, mk) * step(0.0001, sadd));
+          outfitStripe = stripeCol;
+        }
+        vec3 outfitCol = mix(uSkin, uStripeN > 0.0 && mk > 0.0 ? mix(uMarkCol, outfitStripe, step(0.0001, mk)) : uMarkCol, mk);
         // Lips: tinted where the lip shapes carry the surface, darker along the line
         // where upper meets lower.
         // Painted lips, per pixel from the rest position: an upper and a lower half-ellipse
@@ -1648,9 +1714,23 @@ const MOODS = {
   effort:    { teeth: 0.9, mouthL: -0.3, mouthR: -0.3, browFurrow: 0.6, browInner: -0.2, squint: 0.6, lidUpper: -0.35 },
   enjoyment: { teeth: 0.75, mouthL: 0.75, mouthR: 0.75, squint: 0.45, browOuter: 0.1 },
   open:      { mouthOpen: 0.8, browInner: 0.3, browOuter: 0.25, lidUpper: 0.3 },
+  // Discipline faces (see faceState): the subject's, layered by the driver…
+  dread:     { browInner: 0.55, browOuter: 0.25, lidUpper: 0.45, browFurrow: 0.15, mouthL: -0.1, mouthR: -0.1 },
+  wince:     { squint: 0.9, lidUpper: -0.7, browFurrow: 0.8, browInner: -0.15, teeth: 0.8, mouthL: -0.45, mouthR: -0.45 },
+  strain:    { browFurrow: 0.35, squint: 0.3, lidUpper: -0.1, mouthL: -0.15, mouthR: -0.15 },
+  distress:  { browInner: 0.5, browFurrow: 0.6, squint: 0.55, lidUpper: -0.45, mouthL: -0.55, mouthR: -0.55, mouthOpen: 0.3, teeth: 0.3 },
+  exhale:    { mouthOpen: 0.45, lidUpper: -0.2, browInner: 0.2, browFurrow: -0.1 },
+  // …and the disciplinarian's, by severity and beat.
+  calm:      { mouthL: 0.12, mouthR: 0.12, browInner: 0.08, lidUpper: -0.05 },
+  focus:     { browFurrow: 0.2, browInner: -0.1, squint: 0.15, lidUpper: 0.05 },
+  stern:     { browFurrow: 0.65, browInner: -0.25, squint: 0.35, lidUpper: -0.1, mouthL: -0.35, mouthR: -0.35, teeth: 0.1 },
+  exertion:  { teeth: 0.5, browFurrow: 0.3, squint: 0.3, mouthL: -0.2, mouthR: -0.2 },
+  ease:      { browInner: 0.55, browOuter: 0.1, browFurrow: -0.4, mouthL: 0.2, mouthR: 0.2, lidUpper: 0.1 },
 };
 const EXPR_RANGE = { browFurrow: [0, 1], squint: [0, 1], teeth: [0, 1], mouthOpen: [0, 1], saccade: [0, 1], contact: [0, 1], blink: [0, 3] };
-function setMood(ch, name, amount = 1) { ch.mood = MOODS[name] ? { name, target: amount } : null; }
+// One mood at a time (setMood), or several layered, each with its own weight (setMoods({ dread: 0.6, wince: 0.9 })).
+function setMood(ch, name, amount = 1) { ch.moodT = MOODS[name] ? { [name]: amount } : {}; }
+function setMoods(ch, weights) { ch.moodT = weights || {}; }
 // A character's version of a mood: their preset's `moods[name]` if it has one (each
 // character can be tuned; see the viewer), otherwise the shared MOODS entry.
 const moodFor = (m, name) => (m.moods && m.moods[name]) || MOODS[name];
@@ -1669,19 +1749,20 @@ function faceStep(ch, dt) {
   if (!F || !ch.expr) return;
   // The expression in effect: the character's own, plus the current mood's offsets
   // (blended in and out over a quarter of a second).
-  const mv = ch.moodVal || (ch.moodVal = { name: null, amt: 0 });
-  const tgt = ch.mood ? ch.mood.target : 0;
-  if (ch.mood && ch.mood.name !== mv.name) { if (mv.amt < 0.02) mv.name = ch.mood.name; }
-  const want = ch.mood && ch.mood.name === mv.name ? tgt : 0;
-  mv.amt += (want - mv.amt) * (dt > 0 ? 1 - Math.exp(-dt / 0.08) : 1);
-  let e = ch.expr;
-  if (mv.name && mv.amt > 0.001) {
-    e = { ...e };
-    for (const [k, v] of Object.entries(moodFor(ch.spec.m, mv.name))) {
-      const [lo, hi] = EXPR_RANGE[k] || [-1, 1];
-      e[k] = clamp((e[k] || 0) + v * mv.amt, lo, hi);
-    }
+  const mv = ch.moodVal || (ch.moodVal = {}), T = ch.moodT || {};
+  const mk = dt > 0 ? 1 - Math.exp(-dt / 0.08) : 1;
+  for (const n of new Set([...Object.keys(mv), ...Object.keys(T)])) {
+    mv[n] = (mv[n] || 0) + ((T[n] || 0) - (mv[n] || 0)) * mk;
+    if (mv[n] < 0.001 && !T[n]) delete mv[n];
   }
+  let e = ch.expr;
+  const touched = new Set();
+  for (const [n, amt] of Object.entries(mv)) {
+    if (!MOODS[n] || amt < 0.001) continue;
+    if (!touched.size) e = { ...e };
+    for (const [k, v] of Object.entries(moodFor(ch.spec.m, n))) { e[k] = (e[k] || 0) + v * amt; touched.add(k); }
+  }
+  for (const k of touched) { const [lo, hi] = EXPR_RANGE[k] || [-1, 1]; e[k] = clamp(e[k], lo, hi); }
   const A = ch.faceAnim || (ch.faceAnim = { t: 0, nextBlink: 1 + Math.random() * 3, blink: 0, gx: 0, gy: 0, tx: 0, ty: 0, nextSacc: 0.5 });
   A.t += dt;
   // Blinks: a quick close and open (0.16 s), every 2–6 s / rate.
@@ -1696,7 +1777,9 @@ function faceStep(ch, dt) {
   }
   const k = dt > 0 ? 1 - Math.exp(-dt * 30) : 1;      // eyes move fast
   A.gx += (A.tx - A.gx) * k; A.gy += (A.ty - A.gy) * k;
-  const H = F.H, gx = clamp(e.gazeX + A.gx, -1, 1), gy = clamp(e.gazeY + A.gy, -1, 1);
+  // A look toward something (ch.gazeFx: x, y, and how much it takes over the resting gaze and the eyes' wandering).
+  const GF = ch.gazeFx, gw = GF ? clamp(GF.w, 0, 1) : 0;
+  const H = F.H, gx = clamp(e.gazeX * (1 - gw) + (GF ? GF.x * gw : 0) + A.gx * (1 - 0.85 * gw), -1, 1), gy = clamp(e.gazeY * (1 - gw) + (GF ? GF.y * gw : 0) + A.gy * (1 - 0.85 * gw), -1, 1);
   for (const S of F.sides) {
     const s = S.s, E = S.E;
     // Gaze: iris and pupil across the white.
@@ -2095,7 +2178,7 @@ function resetCharacter(ch, pose = 'Relaxed') {
   ch.group.rotation.set(0, 0, 0);
   ch.group.visible = true;
   const u = ch.mesh.material.userData.uniforms;
-  u.uPressAmt.value = 0; u.uPressAmt2.value = 0;
+  u.uPressAmt.value = 0; u.uPressAmt2.value = 0; u.uCapN.value = 0;
   ch.jig = null;
   ch.dancer = null;
   ch.handsOnHead = false;
@@ -2248,6 +2331,97 @@ function handsOnHead(ch) {
 // so the subject's hips sit on that side with the head toward +X.
 // The scene is laid out at the world origin (the IK uses world axes).
 // ════════════════════════════════════════════════════════════════
+
+// What the subject is wearing over the struck area, as a share of the sting taken off (PAIN.CUSHION; garments stack, with a ceiling).
+// Lowered garments and a skirt taken off for the correction don't count.
+function clothCushion(ch) {
+  let left = 1;
+  for (const L of ch.layers || []) {
+    if (ch.lowered && ch.lowered.has(L)) continue;
+    let c = 0;
+    if (L.kind === 'bottom') c = L.lowerTo === 'ankle' ? PAIN.CUSHION.trousers : L.legLen >= 1 ? PAIN.CUSHION.leggings : PAIN.CUSHION.shorts;
+    else if (L.kind === 'briefs') c = L.thong || L.back === 'thong' ? PAIN.CUSHION.thong : L.leg ? PAIN.CUSHION.trunks : PAIN.CUSHION.briefs;
+    else if (L.kind === 'skirt') c = ch.skirt && ch.skirt.off ? 0 : PAIN.CUSHION.skirt;
+    left *= 1 - c;
+  }
+  return Math.min(PAIN.CUSHION_MAX, 1 - left);
+}
+// ════════════════════════════════════════════════════════════════
+// PAIN — how a subject takes discipline. Two stats on each character (0–1; defaults in the presets):
+//   tolerance: how much they can take before they're at their limit (the capacity),
+//   resilience: how little each smack builds, and how quickly the sting and ache fade between them.
+// Each landed smack adds pain from three things the player controls:
+//   - strike speed: a faster swing lands harder (`speed`, 1 = the standard swing),
+//   - the hold before the swing: the arm raised and waiting builds dread, which adds to the next smack (eases in, saturates;
+//     tolerance blunts it),
+//   - the hold after contact: the hand or implement left on the skin keeps stinging (a rate per second while it stays),
+// and from the implement (a base weight, and how much of it is a sharp sting that fades fast against a deep ache that lingers),
+// and from how tender the skin already is (the marks), and from what they're wearing: clothing over the struck area cushions the
+// sting only (clothCushion / PAIN.CUSHION); the ache is the same through any layers. Distress is the pain now against the capacity; its bands drive the
+// reaction and the face. At 1 they're at the EDGE OF RESISTANCE (what was the limit): past it they can go on receiving half again
+// (to 1.5), and that is where they're most receptive to the lesson being imparted; at 1.5 it tips into too harsh, under any
+// circumstance, and the correction stops (the scene won't start another stroke).
+// ════════════════════════════════════════════════════════════════
+const PAIN = {
+  // base: pain of a full-strength smack at standard speed; sting: the share that is sharp (fades fast).
+  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.5, sting: 0.65 }, rod: { base: 3.8, sting: 0.4 }, paddle: { base: 1.65, sting: 0.3 } },
+  TAU_STING: 3.0, TAU_ACHE: 120,         // seconds for the sting and the ache to fall by 1/e, at resilience 0.5
+  RESIST: 0.5,                          // resilience takes up to this share off every smack
+  SPEED_EXP: 1.0,                        // pain ∝ speed ^ this
+  ANTIC_MAX: 0.6, ANTIC_TAU: 1.0,        // dread adds up to this share, building over this many seconds of waiting
+  DWELL_RATE: 0.9, DWELL_MAX: 2.0,      // staying on the skin adds this share of the smack per second, up to this many seconds
+  TENDER: 0.6,                           // fully marked skin hurts this much more
+  // What clothing takes off the sting (the sharp part; the deep ache goes through cloth untouched): by garment, stacking.
+  CUSHION: { thong: 0.03, briefs: 0.12, trunks: 0.15, leggings: 0.25, shorts: 0.35, trousers: 0.4, skirt: 0.2 }, CUSHION_MAX: 0.7,
+  CAP: 70,                               // the capacity at tolerance 0.5 is CAP × (0.7 + 0.6 × tolerance)
+  EDGE: 1, TOO_HARSH: 1.5,   // distress at the edge of resistance, and half again past it, where it's too harsh
+  BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [1, 'close to the edge of resistance'], [1.5, 'past the edge of resistance: most receptive'], [Infinity, 'too harsh']],
+};
+function createPain(stats = {}) {
+  const st = { tolerance: 0.5, resilience: 0.5, ...stats };
+  const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atEdge: false, atLimit: false, tooHarsh: false, peak: 0 };
+  P.capacity = () => PAIN.CAP * (0.7 + 0.6 * st.tolerance);
+  P.level = () => P.sting + P.ache;
+  P.distress = () => P.level() / P.capacity();
+  // How receptive they are to the lesson: little while composed, building as they struggle, fullest from the edge of resistance
+  // to half again past it, and gone once it's too harsh.
+  P.receptivity = () => { const d = P.distress(), t = Math.max(0, Math.min(1, (d - 0.5) / 0.5)), r = 0.15 + 0.85 * t * t * (3 - 2 * t); return d < PAIN.TOO_HARSH ? r : 0; };
+  P.inEdge = () => { const d = P.distress(); return d >= PAIN.EDGE && d < PAIN.TOO_HARSH; };
+  const mark = () => { const d = P.distress(); if (d >= PAIN.EDGE) P.atEdge = P.atLimit = true; if (d >= PAIN.TOO_HARSH) P.tooHarsh = true; };
+  P.band = () => PAIN.BANDS.find(([max]) => P.distress() < max)[1];
+  // A smack lands. info: { implement, strength (0–1), speed (1 = standard), raised (seconds the arm waited raised), tender (0–1) }.
+  // Returns { pain, reaction }: this smack's pain, and how hard the subject reacts (0–1) given it and how they already are.
+  P.hit = info => {
+    const cushion = Math.max(0, Math.min(PAIN.CUSHION_MAX, info.cushion || 0));
+    const I = PAIN.implement[info.implement] || PAIN.implement.hand;
+    const speed = Math.max(0.2, info.speed == null ? 1 : info.speed);
+    const antic = PAIN.ANTIC_MAX * (1 - Math.exp(-(info.raised || 0) / PAIN.ANTIC_TAU)) * (1 - 0.5 * st.tolerance);
+    const p = I.base * (info.strength == null ? 1 : info.strength) * Math.pow(speed, PAIN.SPEED_EXP) * (1 + antic)
+      * (1 + PAIN.TENDER * (info.tender || 0)) * (1 - PAIN.RESIST * st.resilience);
+    // Clothing blunts the sting only: the sharp share is cut, the ache comes through whole.
+    const sting = p * I.sting * (1 - cushion), ache = p * (1 - I.sting), eff = sting + ache;
+    P.sting += sting; P.ache += ache;
+    P.hits++; P.dwell = 0; P.last = { sting, ache, p: eff, cushion };
+    P.peak = Math.max(P.peak, P.distress());
+    mark();
+    // The reaction: how big this smack is against what they can take, how worked up they already are, and how long they waited for it.
+    const reaction = Math.max(0, Math.min(1, 0.2 + 0.8 * (0.5 * eff / (0.3 * P.capacity()) + 0.35 * Math.min(1, P.distress()) + 0.15 * (antic / PAIN.ANTIC_MAX))));
+    return { pain: eff, reaction, cushion };
+  };
+  // Every frame. `onSkin`: the hand or implement is still on the skin from the last smack.
+  P.update = (dt, onSkin = false) => {
+    if (onSkin && P.last && P.dwell < PAIN.DWELL_MAX) {
+      const d = Math.min(dt, PAIN.DWELL_MAX - P.dwell);
+      P.sting += P.last.sting * PAIN.DWELL_RATE * d; P.ache += P.last.ache * PAIN.DWELL_RATE * d; P.dwell += d;
+    }
+    const k = 0.5 + st.resilience;   // the fade rate: resilient people recover faster
+    P.sting *= Math.exp(-dt * k / PAIN.TAU_STING); P.ache *= Math.exp(-dt * k / PAIN.TAU_ACHE);
+    mark();
+  };
+  P.reset = () => { P.sting = P.ache = 0; P.hits = 0; P.last = null; P.dwell = 0; P.atEdge = P.atLimit = P.tooHarsh = false; P.peak = 0; };
+  return P;
+}
+
 const STRIKE_K = 2;   // strike height: steps (~1.4 cm each) up from the glute/thigh fold
 // Swing timing, in seconds. `speed` multiplies how fast the arm moves (lift and
 // strike); the holds are not scaled.
@@ -2282,6 +2456,289 @@ const SUBJ_REACT_Q = { L: poseQuats(SUBJECT_BASE, SUBJECT_REACT), R: poseQuats(S
 SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(SUBJ_REACT_Q.L).map(b => [b, SUBJ_REACT_Q.L[b].clone().slerp(SUBJ_REACT_Q.R[b], 0.5)]));
 const GIVER_Q = Object.fromEntries(Object.keys(GIVER_BEAT).map(k => [k, poseQuats(GIVER_BASE, GIVER_BEAT[k])]));
 
+// ── Over the case ──────────────────────────────────────────────
+// The subject stands facing +X, bent at the hips (the whole body pitched forward about the
+// hip joint, the legs kept upright by counter-rotating the thighs), arms straight down to
+// palms flat on the case lid ahead of them. The disciplinarian stands at the subject's
+// left side (world −Z) facing +Z, turned a little toward the subject's hips, so the
+// swinging (right) arm points at the subject's rear exactly as it does from the seat.
+// Everything else about the scene (strike fit, press, marks) is shared with the lap.
+const CASE_PITCH = 84;   // degrees the torso is pitched forward from upright
+const CASE_SUBJECT_BASE = {
+  // Legs from a pose-editor report: nearly straight, the soles flat so toes and heels both meet the floor.
+  thighL: [-80, -1, -3], thighR: [-80, 1, 3], shinL: [-2, 0, 0], shinR: [-2, 0, 0], footL: [1, 0, 0], footR: [0, 0, 0],
+  spine1: [-3, 0, 0], spine2: [-4, 0, 0], neck: [-40, 0, 0], head: [-14, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+};
+// Struck: the hips jump forward and the back hollows, the head comes up. The legs are the
+// base pose's: they stay straight and planted.
+const CASE_SUBJECT_REACT = {
+  thighL: CASE_SUBJECT_BASE.thighL, thighR: CASE_SUBJECT_BASE.thighR, shinL: CASE_SUBJECT_BASE.shinL, shinR: CASE_SUBJECT_BASE.shinR, footL: CASE_SUBJECT_BASE.footL, footR: CASE_SUBJECT_BASE.footR,
+  spine1: [-12, 0, 0], spine2: [-14, 0, 0], neck: [-48, 0, 0], head: [-16, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+};
+// The standing stance, from a pose-editor report: legs nearly straight, the feet planted flat
+// (the same for every beat and implement).
+const CASE_GIVER_BASE = { thighL: [-1.6, -1.2, 0.6], thighR: [-0.3, 1.5, -5.4], shinL: [-2, -3.5, -0.1], shinR: [-3.7, 3.7, -1.7], footL: [3.2, 1.1, -8.8], footR: [3.5, -1.5, 15.2] };
+const CASE_GIVER_BEAT = {
+  relaxed: { spine1: [16, 0, 0], spine2: [8, 0, 0], neck: [0, 0, 0] },
+  raised:  { spine1: [12, 0, 0], spine2: [4, 8, 0], neck: [4, 0, 0] },
+  contact: { spine1: [20, 0, 0], spine2: [10, -4, 0], neck: [6, 0, 0] },
+};
+// From pose-editor reports. At rest the swinging hand floats just off the near cheek (CASE_REST_HOVER
+// m above the skin) with the thumb tucked; the left thumb lies along the back; a far-side strike
+// leans the spine forward a further CASE_FAR_LEAN degrees and lifts the right shoulder a little.
+const CASE_REST_HOVER = 0.016, CASE_REST_THUMB = [-54, 58, 33], CASE_THUMB_L = [11.2, -1, -8.9];
+const CASE_FAR_LEAN = 9.7, CASE_FAR_CLAV = [-0.3, -3.8, 6.2];
+const CASE_YAW = -35;      // the disciplinarian's turn toward the subject's hips, degrees
+const CASE_GIVER_AT = [0, -0.44];   // where the disciplinarian's pelvis stands (x, z)
+const poseTable = (base, beats) => Object.fromEntries(Object.keys(beats).map(k => [k, poseQuats(base, beats[k])]));
+const CASE_SUBJ_BASE_Q = poseQuats(CASE_SUBJECT_BASE);
+const CASE_SUBJ_REACT_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_SUBJECT_REACT), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_SUBJECT_REACT)) };
+CASE_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(CASE_SUBJ_REACT_Q.L).map(b => [b, CASE_SUBJ_REACT_Q.L[b].clone().slerp(CASE_SUBJ_REACT_Q.R[b], 0.5)]));
+// The paddle's reaction over the case (from a pose-editor report) is a buck, not the other implements'
+// reaction: the hips come forward and sink, the knees bend and the feet stay planted where they are (the feet
+// turn to stay flat). `shift` is the body's move at full reaction (m, for a 1.58 m subject; world axes).
+const CASE_PADDLE_GAZE = { neck: [0.6, 13.8, -3.4], head: [0.8, -25.2, 7.5] };
+const CASE_BUCK = { shift: [0.066, -0.025, -0.009], leftHand: [0, 0.025, -0.013],
+  spine1: [-12.4, 0, 0], spine2: [-10.9, 0, 0],
+  thighL: [-87.5, -1, -3], thighR: [-87.5, 1, 3], shinL: [22.7, 0, 0], shinR: [22.7, 0, 0], footL: [-16.9, 0, 0], footR: [-16.9, 0, 0] };
+const CASE_BUCK_Q = { L: poseQuats(CASE_SUBJECT_BASE, CASE_BUCK), R: poseQuats(CASE_SUBJECT_BASE, mirrorPose(CASE_BUCK)) };
+CASE_BUCK_Q.B = Object.fromEntries(Object.keys(CASE_BUCK_Q.L).map(b => [b, CASE_BUCK_Q.L[b].clone().slerp(CASE_BUCK_Q.R[b], 0.5)]));
+const CASE_GIVER_Q = poseTable(CASE_GIVER_BASE, CASE_GIVER_BEAT);
+
+// ── Hands on knees ─────────────────────────────────────────────
+// The subject stands free with straight legs, bent forward at the hips (KNEES_PITCH from upright, nearly level)
+// with the legs leaning back (KNEES_LEG_BACK) so the hips sit behind the feet and the weight stays over them,
+// palms on the front of the knees. The disciplinarian stands and behaves as over the case (same stance, side
+// and reach); only the subject's pose and hands differ, and there is no case. Struck with the hand or hair
+// brush, only the head moves; struck with the paddle the knees give lightly and the body leans forward, the feet
+// staying planted (the legs are solved to keep them there, see kneesBody).
+const KNEES_PITCH = 85, KNEES_LEG_BACK = 12;
+// From pose-editor reports (Kiko, 1.58 m; scaled by height): the pelvis sits 5.8 cm back and 1.1 cm lower than stood and
+// the ankles come in 6.8 cm (left) and 9.2 cm (right) toward the hips, so the legs are more upright over the feet.
+// Struck with the hand or hair brush the pelvis comes forward 4.1 cm and 0.3 cm up (the ankles stay); struck with
+// the paddle the hip bend reduces by KNEES_UP degrees and the subject comes up, the pelvis and feet staying put.
+const KNEES_STANCE = { pelvis: [-0.058, -0.011, 0.002], ankleL: 0.068, ankleR: 0.092 };
+const KNEES_CONTACT = { pelvis: [0.041, 0.003, 0] };
+const KNEES_UP = 12;
+// ── Bent over, feet spread ───────────────────────────────────
+// The hands-on-knees pose with the feet wide apart (ankles `SPREAD_ANKLE` either side of the centre line, 1.58 m
+// subject) and the palms on the fronts of the thighs. The disciplinarian stands wider and further back (from a
+// pose-editor report, Kenji with Aya) and turns toward the hips. The legs are solved in 3D (see kneesBody).
+const SPREAD_ANKLE = 0.275, SPREAD_ANKLE_X = -0.11;
+// The disciplinarian's relaxed stance (pose-editor report, Aya with Rin, paddle), kept for every beat until the others
+// are edited: the pelvis turned 33° back from the 43° the figure stands at (10° in all), the upper back as set, the feet
+// turned. The left hand hangs by the hip; the paddle hangs behind (SPREAD_PADDLE_REST: from the right shoulder, cm).
+const SPREAD_GIVER_AT = [-0.045, -0.643], SPREAD_YAW = 43;
+const SPREAD_GIVER_STANCE = { pelvis: [0, -33, 0], spine1: [8.5, -5.7, -5.2], spine2: [-14, -1.9, 3.5], footL: [3.2, 16.5, 16.5], footR: [3.5, -23.5, -1.5] };
+const SPREAD_HANG_L = [-0.028, -0.468, 0.049];   // the left hand's rest, from the left shoulder (m, 1.72 m tall; world axes)
+const SPREAD_HANG_POLE_L = [0.13, -0.235, -0.125];
+const SPREAD_PADDLE_REST = { face: [-0.188, -0.543, 0.399], faceN: [0.992, -0.107, 0.069], axis: [-0.057, 0.119, 0.991], elbow: [-0.104, -0.269, 0.065] };
+const KNEES_PRESS_DEPTH = 0.003;   // the palm sinks this far into the skin at contact (12 mm elsewhere): the bent-over rear is steeper, so less
+// The swinging hand's rest (pose-editor report, 12:54), measured from the right shoulder (m, for a 1.72 m
+// disciplinarian; world axes before any lean): the empty hand hangs close by the near hip, the brush hangs at the
+// side pointing forward, its face toward the subject. `at` is where the hand goes (the palm, as the rest
+// placement otherwise puts it); `pole`: the upper arm's elbow direction; `n`: the surface normal the palm faces.
+// The paddle hangs a little further back at the side (12:56 report): its face centre moves by `dface` (m, for 1.7 m
+// tall, world axes) from the case's rest, and the elbow points `elbow` from the shoulder.
+const KNEES_PADDLE_REST = { dface: [-0.059, -0.068, -0.050], elbow: [-0.143, -0.970, -0.221] };
+const KNEES_REST = {
+  hand:  { delta: [0.016, -0.047, -0.014], pole: [-0.026, -0.265, 0.13] },
+  brush: { delta: [-0.031, -0.179, -0.358], pole: [-0.027, -0.290, -0.053], n: [-0.989, 0.025, -0.148] },
+};
+// Paddle on contact (from the 12:52 report): the back hollows a little more and the blade rolls up to 95° (the
+// case's 82.5° otherwise). The hair brush's contact leans the disciplinarian's upper back further forward (17.6°).
+const KNEES_PADDLE_BACK = { spine1: [-8.4, 0, -1.6], spine2: [-18.6, 0, -1.3] };
+const KNEES_ROLL = 95;
+const KNEES_GIVER_BEAT = { ...CASE_GIVER_BEAT, contact: { ...CASE_GIVER_BEAT.contact, spine2: [17.6, -4, 0] } };
+const KNEES_GIVER_Q = poseTable(CASE_GIVER_BASE, KNEES_GIVER_BEAT);
+// Contact leans the upper body further forward over the subject (14:16 report).
+const SPREAD_CONTACT_BACK = { spine1: [28.9, -9.3, -11.4] };
+const SPREAD_GIVER_BEAT = Object.fromEntries(['relaxed', 'raised', 'contact'].map(b => [b, { ...KNEES_GIVER_BEAT[b], ...SPREAD_GIVER_STANCE, ...(b === 'contact' ? SPREAD_CONTACT_BACK : {}) }]));
+const SPREAD_GIVER_Q = poseTable(CASE_GIVER_BASE, SPREAD_GIVER_BEAT);
+const KNEES_SUBJECT_BASE = {
+  // (A thigh swings forward with a negative angle, and the body's pitch swings the legs back, so the hip takes both.)
+  thighL: [KNEES_LEG_BACK - KNEES_PITCH, 0, -4], thighR: [KNEES_LEG_BACK - KNEES_PITCH, 0, 4], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [-KNEES_LEG_BACK, 0, 0], footR: [-KNEES_LEG_BACK, 0, 0],
+  spine1: [-6, 0, 0], spine2: [-8, 0, 0], neck: [-30, 0, 0], head: [-12, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+  fingersL: [0, 0, -35], fingersR: [0, 0, 35],
+};
+// Only the head moves when struck.
+const KNEES_SUBJECT_REACT = { ...KNEES_SUBJECT_BASE, spine2: [-12.8, 0, -0.5], neck: [-44, 0, 0], head: [-16, 0, 0] };
+const KNEES_BASE_Q = poseQuats(KNEES_SUBJECT_BASE);
+const KNEES_REACT_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_SUBJECT_REACT), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_SUBJECT_REACT)) };
+KNEES_REACT_Q.B = Object.fromEntries(Object.keys(KNEES_REACT_Q.L).map(b => [b, KNEES_REACT_Q.L[b].clone().slerp(KNEES_REACT_Q.R[b], 0.5)]));
+const KNEES_PADDLE_Q = { L: poseQuats(KNEES_SUBJECT_BASE, KNEES_PADDLE_BACK), R: poseQuats(KNEES_SUBJECT_BASE, mirrorPose(KNEES_PADDLE_BACK)) };
+KNEES_PADDLE_Q.B = Object.fromEntries(Object.keys(KNEES_PADDLE_Q.L).map(b => [b, KNEES_PADDLE_Q.L[b].clone().slerp(KNEES_PADDLE_Q.R[b], 0.5)]));
+
+// ── Hands on head ──────────────────────────────────────────────
+// The subject stands free, upright, facing +X, hands on the back of the head with the elbows out.
+// The disciplinarian stands as over the case (same stance, same side), the right hand striking the
+// rear; the left hand rests at their side while relaxed and against the subject's navel when the
+// arm is raised and on contact, steadying them.
+const HEAD_SUBJECT_BASE = {
+  thighL: [0, 0, -3], thighR: [0, 0, 3], shinL: [0, 0, 0], shinR: [0, 0, 0], footL: [0, 0, 0], footR: [0, 0, 0],
+  spine1: [-2, 0, 0], spine2: [-2, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
+  upperArmL: [-75, 0, -30], upperArmR: [-75, 0, 30], forearmL: [-15, 0, 0], forearmR: [-15, 0, 0],
+  fingersL: [0, 0, -27.5], fingersR: [0, 0, 27.5],   // a loose curl on the head
+};
+// Struck: the back hollows, the chest comes forward and the head lifts.
+// Struck (from a pose-editor report): the chest comes up, the head goes back, and they rise onto their toes.
+const HEAD_RISE = 0.038;   // m for a 1.58 m subject, at full reaction
+const HEAD_SUBJECT_REACT = { ...HEAD_SUBJECT_BASE, spine1: [1.5, 0, -1.2], spine2: [-12.9, -0.6, -1.9], neck: [-14, -0.6, 3.6], head: [-4, 0, 0], clavL: [0.2, -2.1, 1],
+  thighL: [-0.3, 0, -3.4], footL: [18, 0, 0], footR: [19.5, 0, 0] };
+// The paddle's reaction is different: bucking away from it, the hips come forward while the feet stay planted
+// (the body pitches about them by `pitch` degrees and the back hollows to bring the chest back), instead of
+// rising onto the toes. The feet counter-turn to stay flat.
+const HEAD_BUCK = { pitch: 4, spine1: -7, spine2: -7, neck: -3, head: -4 };
+const HEAD_BUCK_REACT = { ...HEAD_SUBJECT_BASE, spine1: [HEAD_BUCK.spine1, 0, 0], spine2: [HEAD_BUCK.spine2, 0, 0], neck: [HEAD_BUCK.neck, 0, 0], head: [HEAD_BUCK.head, 0, 0],
+  footL: [-HEAD_BUCK.pitch, 0, 0], footR: [-HEAD_BUCK.pitch, 0, 0] };
+const HEAD_SUBJ_BASE_Q = poseQuats(HEAD_SUBJECT_BASE);
+const HEAD_BUCK_Q = { L: poseQuats(HEAD_SUBJECT_BASE, HEAD_BUCK_REACT), R: poseQuats(HEAD_SUBJECT_BASE, mirrorPose(HEAD_BUCK_REACT)) };
+HEAD_BUCK_Q.B = Object.fromEntries(Object.keys(HEAD_BUCK_Q.L).map(b => [b, HEAD_BUCK_Q.L[b].clone().slerp(HEAD_BUCK_Q.R[b], 0.5)]));
+// The left hand rests on the front of the subject's left side at the waist (anchor `navel`, from the editor); the
+// fingers run around the front.
+const HEAD_NAVEL_FINGERS = new THREE.Vector3(0.69, -0.11, 0.72);
+const HEAD_SUBJ_REACT_Q = { L: poseQuats(HEAD_SUBJECT_BASE, HEAD_SUBJECT_REACT), R: poseQuats(HEAD_SUBJECT_BASE, mirrorPose(HEAD_SUBJECT_REACT)) };
+HEAD_SUBJ_REACT_Q.B = Object.fromEntries(Object.keys(HEAD_SUBJ_REACT_Q.L).map(b => [b, HEAD_SUBJ_REACT_Q.L[b].clone().slerp(HEAD_SUBJ_REACT_Q.R[b], 0.5)]));
+// Where each palm goes on the skull: a direction from its centre (head frame: +X the subject's left,
+// +Y up, +Z forward), the fingers' direction along the surface, and the elbow's pole (world, from
+// the shoulder; out to the side and a little forward).
+// The disciplinarian's place and turn. They stand behind the subject's rear plane, square on to the
+// subject while relaxed (from a pose-editor report: pelvis at x −29.5 cm, facing the subject, the back
+// straight), and turn toward the subject's hips as the arm comes up. Hanging hands (m, × height, from
+// the shoulder in the disciplinarian's frame): down, outward and forward.
+const HEAD_GIVER_AT = [-0.266, -0.386];
+const HEAD_YAW_RELAXED = 9, HEAD_YAW_STRIKE = 30;
+const HEAD_HANG = { down: 0.312, out: 0.048, fwd: 0.007 };
+// Raised and on contact the turn swings the feet round, so those beats re-plant them with their own leg
+// angles (from a pose-editor report); the left hand's place on the navel is the anchor's, the same for both.
+const HEAD_STRIKE_LEGS = { thighL: [-7.9, -1.6, -0.7], footL: [12.5, 0.9, -10.1], thighR: [14.4, -0.4, -3.5], footR: [-8.5, -1.5, 15.2] };
+const HEAD_GIVER_BEAT = {
+  relaxed: { spine1: [3.8, -1.1, -3.9], spine2: [1.3, 1.6, 4], neck: [0, 0, 0] },
+  raised:  { ...CASE_GIVER_BEAT.raised, spine1: [13.5, 0, 7.2], spine2: [-3.8, 7.4, 6.3], ...HEAD_STRIKE_LEGS },
+  contact: { ...CASE_GIVER_BEAT.contact, spine1: [19.8, 0, -1.4], spine2: [-11, -4.6, 12.3], ...HEAD_STRIKE_LEGS },
+};
+// The raised arm's elbow (world, from the shoulder: out to the side and a little up) and the gaze's
+// trim as the arm is raised (neck and head offsets after the look, local degrees).
+const HEAD_POLE_RAISED = new THREE.Vector3(-0.184, -0.12, -0.198);
+// Where the raised hand's palm goes, from the shoulder (m, for 1.7 m tall; world axes): the elbow as edited in
+// the pose editor with the hand continuing the forearm.
+const HEAD_RAISED_HAND = new THREE.Vector3(-0.192, 0.103, 0.042);
+const HEAD_GAZE = { raised: { neck: [-6.3, -1.4, 11.5], head: [-0.6, -21.9, 4.2] }, contact: { neck: [-5.7, -1.5, 12], head: [-0.9, -19.8, 4.9] } };
+// A far-side (right) strike: a small further lean and shoulder turn so the hand reaches the site comfortably.
+const HEAD_FAR_LEAN = 4, HEAD_FAR_TURN = 10;
+// Standing, the hand lands higher on the cheek than seated (steps up the strike strip; see STRIKE_K).
+const HEAD_STRIKE_K = 7;
+const HEAD_GIVER_Q = poseTable(CASE_GIVER_BASE, HEAD_GIVER_BEAT);
+const HEAD_PALM = { dir: [0.21, 0.42, -0.88], fingers: [-0.92, 0.33, -0.19], lift: 0.019, pole: [0.1, 0.1, 0.5] };
+
+// Puts `ch` (already posed) so that its pelvis joint is at `at` with the group turned to
+// `quat`, then drops it until its feet rest on the floor.
+function standAt(ch, quat, at) {
+  ch.group.quaternion.copy(quat);
+  const pel = new THREE.Vector3(...ch.spec.J.pelvis).applyQuaternion(quat);
+  ch.group.position.copy(at).sub(pel);
+  ch.group.updateMatrixWorld(true);
+  const lift = (ch.bones.footL.getWorldPosition(new THREE.Vector3()).y + ch.bones.footR.getWorldPosition(new THREE.Vector3()).y) / 2 - ch.spec.J.footL[1];
+  ch.group.position.y -= lift;
+  ch.group.updateMatrixWorld(true);
+}
+// Where a subject's palm goes on the lid (height `top`): ahead of the shoulder far enough
+// that the arm is a little short of straight, level with the shoulder across the body.
+function casePalm(s, side, top) {
+  const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+  const wristReach = s.bones['forearm' + side].position.length() + s.bones['hand' + side].position.length();
+  const dy = sh.y - top, r = wristReach * 0.94;
+  const dx = Math.sqrt(Math.max(0, r * r - dy * dy));
+  const sHand = s.spec.H * 0.106;
+  return new THREE.Vector3(sh.x + dx + sHand * 0.42, top + 0.012 * s.spec.H, sh.z);
+}
+// The case itself: a road case with its near edge `x0` and far edge `x1` along X, `top` high.
+function buildCase(top, x0, x1) {
+  const g = new THREE.Group();
+  const caseMat = new THREE.MeshStandardMaterial({ color: lin(0x1a1a1c), roughness: 0.75, metalness: 0.15 });
+  const metal = new THREE.MeshStandardMaterial({ color: lin(0x8a8a90), roughness: 0.35, metalness: 0.8 });
+  const L = x1 - x0, W = 0.9;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(L, top, W), caseMat);
+  body.position.set((x0 + x1) / 2, top / 2, 0); body.castShadow = body.receiveShadow = true; g.add(body);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(L + 0.02, 0.025, W + 0.02), metal);
+  trim.position.set((x0 + x1) / 2, top - 0.012, 0); g.add(trim);
+  for (const x of [x0 + 0.02, x1 - 0.02]) for (const z of [-W / 2 + 0.02, W / 2 - 0.02]) for (const y of [0.03, top - 0.04]) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), metal);
+    c.position.set(x, y, z); g.add(c);
+  }
+  return g;
+}
+
+// Hands on knees: positions the standing subject for this frame and solves the legs to keep the feet planted.
+// The body leans (`pitch` degrees more than stood) and the pelvis moves (`dx` forward, `dy` up, m) as the
+// paddle's buckle asks, then each leg's thigh, shin and foot are set in the sagittal plane so the ankles stay
+// where they were (the knee forward of the line from hip to ankle, the sole flat).
+function kneesBody(scn, k) {
+  const s = scn.s, sc = s.spec.H / 1.58, DEG = Math.PI / 180;
+  const up = scn.buck;   // the paddle: the subject comes up (less hip bend) instead of moving forward
+  const pitch = KNEES_PITCH - (up ? KNEES_UP * k : 0);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch * DEG));
+  const pel = new THREE.Vector3(...s.spec.J.pelvis).applyQuaternion(q);
+  const target = scn.kneesPelvis.clone().add(new THREE.Vector3(...KNEES_STANCE.pelvis).multiplyScalar(sc));
+  if (!up) target.add(new THREE.Vector3(...KNEES_CONTACT.pelvis).multiplyScalar(sc * k));
+  s.group.quaternion.copy(q);
+  s.group.position.copy(target).sub(pel);
+  s.group.updateMatrixWorld(true);
+  if (scn.atSpread) { spreadLegs(scn); return; }
+  for (const side of ['L', 'R']) {
+    const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
+    const H = th.getWorldPosition(new THREE.Vector3()), A = scn.kneesAnkle[side].clone();
+    A.x += (side === 'L' ? KNEES_STANCE.ankleL : KNEES_STANCE.ankleR) * sc;
+    const L1 = sh.position.length(), L2 = ft.position.length();
+    const dx = A.x - H.x, dy = H.y - A.y;
+    const d = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * 0.999);
+    const base = Math.atan2(dx, dy);
+    const al = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1)), be = Math.acos(clamp((L2 * L2 + d * d - L1 * L1) / (2 * L2 * d), -1, 1));
+    const ft_ = base + al, fs_ = base - be;   // thigh and shin forward angles from straight down
+    const eu = new THREE.Euler().setFromQuaternion(th.quaternion, 'YXZ');   // keep the thigh's splay, replace its pitch
+    th.quaternion.setFromEuler(new THREE.Euler(-ft_ - pitch * DEG, eu.y, eu.z, 'YXZ'));
+    sh.quaternion.setFromEuler(new THREE.Euler(ft_ - fs_, 0, 0, 'YXZ'));
+    ft.quaternion.setFromEuler(new THREE.Euler(fs_, 0, 0, 'YXZ'));
+  }
+  s.group.updateMatrixWorld(true);
+}
+// Bent over with the feet spread: each leg solved in 3D so the ankle lands on `SPREAD_ANKLE` out from the centre line
+// (the knee forward of the hip-to-ankle line), the thigh and shin aimed with the least twist and the foot flat,
+// turned out about the vertical (30° left, 20° right toe-out, as edited).
+function spreadLegs(scn) {
+  const s = scn.s, sc = s.spec.H / 1.58, DEG = Math.PI / 180;
+  const root = s.group.matrixWorld;
+  for (const side of ['L', 'R']) {
+    const th = s.bones['thigh' + side], sh = s.bones['shin' + side], ft = s.bones['foot' + side];
+    const sgn = side === 'L' ? -1 : 1;   // the subject's left is world −Z
+    const H = th.getWorldPosition(new THREE.Vector3());
+    const A = new THREE.Vector3(scn.kneesPelvis.x + SPREAD_ANKLE_X * sc, scn.kneesAnkle[side].y, sgn * SPREAD_ANKLE * sc);
+    const L1 = sh.position.length(), L2 = ft.position.length();
+    const d = clamp(H.distanceTo(A), Math.abs(L1 - L2) + 1e-3, (L1 + L2) * 0.999);
+    const dir = A.clone().sub(H).normalize();
+    const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+    const fwd = new THREE.Vector3(1, 0, 0).addScaledVector(dir, -dir.x).normalize();   // the knee bends forward (+X)
+    const K = H.clone().addScaledVector(dir, a).addScaledVector(fwd, h);
+    // Thigh: aim its rest direction at the knee, in the pelvis's frame.
+    const aim = (bone, to) => {
+      const parentInv = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+      const rest = bone.children[0] ? bone.children[0].position.clone().normalize() : new THREE.Vector3(0, -1, 0);
+      bone.quaternion.setFromUnitVectors(rest, to.clone().applyQuaternion(parentInv).normalize());
+      bone.updateMatrixWorld(true);
+    };
+    aim(th, K.clone().sub(H));
+    aim(sh, A.clone().sub(K));
+    // Foot flat on the floor, toes turned out about the vertical.
+    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (Math.PI / 2 + sgn * (side === 'L' ? 30 : 20) * DEG * -1));
+    ft.quaternion.copy(ft.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(yaw));
+    ft.updateMatrixWorld(true);
+  }
+  s.group.updateMatrixWorld(true);
+}
 function buildBench(top) {
   const g = new THREE.Group();
   const caseMat = new THREE.MeshStandardMaterial({ color: lin(0x1a1a1c), roughness: 0.75, metalness: 0.15 });
@@ -2480,11 +2937,33 @@ const LAP_ALONG = 0.7, LAP_SETTLE = 0.9;
 function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
-    fitCache: {}, onImpact: null, dv: null, pendingFlip: false };
-  const seat = seatGiver(g);
-  g.target = GIVER_Q[scn.beat];
-  scn.bench = seat.bench;
-  parent.add(scn.bench);
+    fitCache: {}, onImpact: null, dv: null, pendingFlip: false, raisedT: 0, faces: !!opts.faces, severity: opts.severity != null ? opts.severity : null,
+    pain: opts.pain ? createPain(typeof opts.pain === 'object' ? opts.pain : { tolerance: s.spec.m.tolerance, resilience: s.spec.m.resilience }) : null,
+    atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees' || opts.position === 'spread', atHead: opts.position === 'head', atKnees: opts.position === 'knees' || opts.position === 'spread', atSpread: opts.position === 'spread', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
+  const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
+  scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
+  if (atCase) { scn.wideContact = CASE_WIDE_CONTACT; scn.wideRaised = caseWideRaised(); scn.wideRest = caseWideRest(); scn.baseQ = CASE_SUBJ_BASE_Q; scn.reactQ = CASE_SUBJ_REACT_Q; scn.giverBaseQ = CASE_GIVER_Q; scn.giverBase = CASE_GIVER_BASE; scn.giverBeat = CASE_GIVER_BEAT; }
+  if (atKnees) { scn.giverBaseQ = KNEES_GIVER_Q; scn.giverBeat = KNEES_GIVER_BEAT; scn.wideContact = { ...CASE_WIDE_CONTACT, roll: KNEES_ROLL };
+    { const R = caseWideRest(), sc = 1; scn.wideRest = { ...R, face: [R.face[0] + KNEES_PADDLE_REST.dface[0], R.face[1] + KNEES_PADDLE_REST.dface[1], R.face[2] + KNEES_PADDLE_REST.dface[2]], elbow: KNEES_PADDLE_REST.elbow }; } scn.baseQ = KNEES_BASE_Q; scn.reactQ = KNEES_REACT_Q; scn.buckQ = KNEES_PADDLE_Q; }   // (the paddle's rise is the body's, in kneesBody)
+  if (scn.atSpread) { scn.giverBaseQ = SPREAD_GIVER_Q; scn.giverBeat = SPREAD_GIVER_BEAT; scn.wideRest = { ...SPREAD_PADDLE_REST, face: [...SPREAD_PADDLE_REST.face] }; }
+  if (atHead) {
+    scn.baseQ = HEAD_SUBJ_BASE_Q; scn.reactQ = HEAD_SUBJ_REACT_Q; scn.buckQ = HEAD_BUCK_Q; scn.giverBaseQ = HEAD_GIVER_Q; scn.giverBeat = HEAD_GIVER_BEAT;
+    scn.wideRaised = caseWideRaised(HEAD_YAW_STRIKE); scn.wideRest = caseWideRest(HEAD_YAW_RELAXED);
+  }
+  const seat = atCase ? null : seatGiver(g);
+  if (atCase) {
+    // Standing at the subject's left, turned toward the subject's hips.
+    resetCharacter(g);
+    g.target = scn.giverBaseQ[scn.beat];
+    g.pose = {}; for (const b of BONES) { g.pose[b] = g.target[b].clone(); g.bones[b].quaternion.copy(g.pose[b]); }
+    const at = atHead ? HEAD_GIVER_AT : scn.atSpread ? SPREAD_GIVER_AT : CASE_GIVER_AT;
+    standAt(g, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (atHead ? HEAD_YAW_RELAXED : scn.atSpread ? SPREAD_YAW : CASE_YAW) * Math.PI / 180),
+      new THREE.Vector3(at[0], g.spec.J.pelvis[1], at[1]));
+  } else {
+    g.target = GIVER_Q[scn.beat];
+    scn.bench = seat.bench;
+    parent.add(scn.bench);
+  }
 
   // A skirt comes off for the correction (see setSkirtOff): pressed between two bodies
   // whose skin the contact shader compresses on the GPU, the cloth can't be kept out of
@@ -2499,8 +2978,40 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // height is the thigh's own top there (it thins toward the knee), less a little
   // for the weight settling in; the contact shader takes up the rest.
   resetCharacter(s);
-  s.target = SUBJ_BASE_Q;
+  s.target = scn.baseQ;
   s.pose = {}; for (const b of BONES) s.pose[b] = s.target[b].clone();
+  if (atHead) {
+    // Standing free: upright, facing +X (local +X is the subject's left, world −Z, as in the lap).
+    for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
+    standAt(s, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2), new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
+    scn.subjBaseY = s.group.position.y;
+    scn.subjBasePos = s.group.position.clone(); scn.subjBaseQ = s.group.quaternion.clone();
+    const fa = s.bones.footL.getWorldPosition(new THREE.Vector3()), fb = s.bones.footR.getWorldPosition(new THREE.Vector3());
+    scn.feetPivot = new THREE.Vector3((fa.x + fb.x) / 2, 0, (fa.z + fb.z) / 2);
+    const hp = s.spec.prims.find(P => P.bone === 'head' && P.tag === 'head');
+    scn.headPrim = { c: new THREE.Vector3(...hp.c).sub(new THREE.Vector3(...s.spec.J.head)), r: new THREE.Vector3(...hp.r) };
+  } else if (atCase) {
+    // Bent over the case: pitched forward about the hips, facing +X (local +X is the
+    // subject's left, world −Z, as in the lap).
+    for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (atKnees ? KNEES_PITCH : CASE_PITCH) * Math.PI / 180));
+    standAt(s, q, new THREE.Vector3(0, s.spec.J.pelvis[1], 0));
+    scn.subjBasePos = s.group.position.clone();
+    if (atKnees) {
+      // What the legs are solved against: the pelvis and the planted ankles, as stood.
+      scn.kneesPelvis = s.bones.pelvis.getWorldPosition(new THREE.Vector3());
+      scn.kneesAnkle = { L: s.bones.footL.getWorldPosition(new THREE.Vector3()), R: s.bones.footR.getWorldPosition(new THREE.Vector3()) };
+    }
+    if (!atKnees) {
+    // The lid is set from the subject's own height, and runs from just short of the palms
+    // to well past them.
+    scn.caseTop = opts.caseHeight || s.spec.Y.hipJoint * 0.88;
+    const pL = casePalm(s, 'L', scn.caseTop), pR = casePalm(s, 'R', scn.caseTop);
+    scn.bench = buildCase(scn.caseTop, Math.min(pL.x, pR.x) - 0.3, Math.max(pL.x, pR.x) + 0.4);
+    parent.add(scn.bench);
+    }
+  } else {
   const tilt = 0.28, c = Math.cos(tilt), sn = Math.sin(tilt);
   const R = new THREE.Matrix4().makeBasis(
     new THREE.Vector3(0, 0, -1), new THREE.Vector3(c, -sn, 0), new THREE.Vector3(-sn, -c, 0));
@@ -2513,15 +3024,27 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   s.group.position.copy(pelvisAt).sub(pelvisLocal);
   for (const b of BONES) s.bones[b].quaternion.copy(s.pose[b]);
   s.group.updateMatrixWorld(true);
+  }
   scn.anchors = sceneAnchors(s);
+  if (scn.atSpread) {
+    // The disciplinarian's left hand rests on the curve of their own left hip: a skinned point on the side of the pelvis
+    // just below the waist, taken once in rest space, with its outward normal.
+    const sp = g.spec, J = sp.J, H = sp.H, pt = [0, sp.Y.hip - 0.02 * H, 0];
+    for (let i = 0; i < 400 && field(sp, pt) < 0; i++) pt[0] += 0.001;
+    const n = norm(gradient(sp, pt, 0.0015, field(sp, pt))), pos = g.mesh.geometry.attributes.position, v = new THREE.Vector3(), q = new THREE.Vector3(...pt);
+    let index = 0, best = Infinity;
+    for (let i = 0; i < pos.count; i++) { const d = v.fromBufferAttribute(pos, i).distanceToSquared(q); if (d < best) { best = d; index = i; } }
+    scn.hipL = { index, n: new THREE.Vector3(...n), bone: 'pelvis' };
+  }
 
   // The disciplinarian's pose for a beat, with the implement's own layer if it has one.
   const giverQCache = {};
   scn.giverQ = beat => {
-    const L = scn.implement && IMPLEMENTS[scn.implement].giver && IMPLEMENTS[scn.implement].giver[beat];
-    if (!L) return GIVER_Q[beat];
+    const layers = scn.implement && (scn.atHead || scn.atSpread ? null : scn.atCase ? IMPLEMENTS[scn.implement].giverCase : IMPLEMENTS[scn.implement].giver);
+    const L = layers && layers[beat];
+    if (!L) return scn.giverBaseQ[beat];
     const k = scn.implement + beat;
-    return giverQCache[k] || (giverQCache[k] = poseQuats(GIVER_BASE, GIVER_BEAT[beat], L));
+    return giverQCache[k] || (giverQCache[k] = poseQuats(scn.giverBase, scn.giverBeat[beat], L));
   };
   scn.setBeat = beat => { scn.mode = 'beat'; scn.beat = beat; g.target = scn.giverQ(beat); };
   scn.setLoop = on => { scn.mode = on ? 'loop' : 'beat'; scn.loopT = 0; if (!on) scn.setBeat(scn.beat); };
@@ -2538,15 +3061,25 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // One full smack from wherever the arm is: lift, then strike the next contact site
   // (alternating from the second), and hold there until the next call.
   // `hold` keeps the arm raised that long before the strike.
+  // (Past too harsh no further stroke starts, under any circumstance.)
   scn.cycle = (strength = 1, lift = scn.timing.lift / scn.timing.speed, strike = scn.timing.strike / scn.timing.speed, hold = 0) =>
-    scn.raise(lift, () => hold > 0 ? moveTo(1, hold, easeInOut, () => scn.strike(strength, strike)) : scn.strike(strength, strike));
+    scn.pain && scn.pain.tooHarsh ? null : scn.raise(lift, () => hold > 0 ? moveTo(1, hold, easeInOut, () => scn.strike(strength, strike)) : scn.strike(strength, strike));
   // True while the arm is still travelling (a cycle hasn't landed yet).
   scn.busy = () => !!(scn.dv && scn.dv.onArrive);
+  // A smack lands: with a pain model (opts.pain) the subject's reaction comes from it (the implement, strength, how fast the
+  // swing, how long the arm waited raised, how tender the skin already is), otherwise from `strength` as it always did.
+  scn.land = strength => {
+    const waited = scn.raisedT; scn.raisedT = 0; scn.lastStrength = strength;
+    if (!scn.pain) return strength;
+    const mk = s.marks, tender = mk ? Math.max(mk.L.f || 0, mk.R.f || 0) : 0;
+    scn.lastHit = scn.pain.hit({ implement: scn.implement, strength, speed: scn.timing.speed, raised: waited, tender, cushion: clothCushion(s) });
+    return scn.lastHit.reaction;
+  };
   // Strike from wherever the arm is. `strength` (0–1) scales the subject's reaction.
   scn.strike = (strength = 1, dur = scn.timing.strike / scn.timing.speed) => {
     scn.pendingFlip = false;
     moveTo(2, dur, easeIn, () => {
-      scn.reaction = Math.max(scn.reaction, strength); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side);
+      scn.reaction = Math.max(scn.reaction, scn.land(strength)); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side);
       if (scn.onImpact) scn.onImpact(scn.side, strength);
     });
   };
@@ -2556,6 +3089,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // marks both sides, each at its own site.
   scn.mark = side => {
     const w = IMPLEMENTS[scn.implement].mark;
+    if (scn.tool && scn.tool.rod) { const F = scn.lastStrike; if (F && F.skin) addStripe(s, F.skin, F.a, scn.tool.halfLen); return; }
     if (scn.tool && scn.tool.wide) { const F = scn.lastStrike; if (F && F.skinL) { addMark(s, 'L', F.skinL, w); addMark(s, 'R', F.skinR, w); } return; }
     const C = scn.fitCache[side]; if (C && C.fit && C.fit.skin) addMark(s, side, C.fit.skin, w);
   };
@@ -2564,11 +3098,26 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // The implement in the disciplinarian's right hand ('hand' for none; see IMPLEMENTS).
   scn.implement = 'hand'; scn.tool = null;
   scn.setImplement = name => {
-    if (!IMPLEMENTS[name]) name = 'hand';
+    if (!IMPLEMENTS[name] || (scn.atSpread && !IMPLEMENTS[name].dual)) name = scn.atSpread ? 'paddle' : 'hand';
     if (scn.tool) { scn.tool.grp.parent.remove(scn.tool.grp); scn.tool.grp.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.implement = name;
+    scn.rodT = rodRoll();   // (the rod's height, 0 the lowest strike to 11 the highest; redrawn each lift)
+    scn.buck = !!(scn.atCase && name === 'paddle');   // standing positions: the paddle's reaction differs (HEAD_BUCK, CASE_BUCK)
+    if (scn.atCase && !scn.atHead && !scn.atKnees) scn.buckQ = CASE_BUCK_Q;
     scn.tool = IMPLEMENTS[name].build ? IMPLEMENTS[name].build(g) : null;
     scn.toolFix = {}; scn.fitCache.B = null; scn.handQ = null;
+    // The rod's own contact settings (ROD_CONTACT), restored for any other implement.
+    if (!scn.contact0) scn.contact0 = scn.wideContact;
+    const rc = name === 'rod' ? ROD_CONTACT[scn.atHead ? 'head' : scn.atKnees ? 'knees' : scn.atCase ? 'case' : 'lap'] : null;
+    if (!scn.raised0) scn.raised0 = scn.wideRaised;
+    scn.wideRaised = name === 'rod' && scn.atSpread ? { ...scn.raised0, ...ROD_RAISED_SPREAD } : scn.raised0;
+    scn.wideContact = rc ? { ...scn.contact0, ...(rc.roll != null ? { roll: rc.roll, keepRoll: true } : {}), elbow: rc.elbow } : scn.contact0;
+    if (scn.atHead) {
+      const shift = rc && rc.at ? [rc.at[0] - HEAD_GIVER_AT[0], rc.at[1] - HEAD_GIVER_AT[1]] : [0, 0], was = scn.giverShift || [0, 0];
+      g.group.position.x += shift[0] - was[0]; g.group.position.z += shift[1] - was[1]; scn.giverShift = shift;
+      scn.yawStrike = rc && rc.yawStrike != null ? rc.yawStrike : HEAD_YAW_STRIKE;
+      g.group.updateMatrixWorld(true);
+    }
     // Middle and end finger joints closed round the handle (or straightened again).
     setFingerBend(g, 'R', scn.tool ? (scn.tool.grip || IMPLEMENTS[name].grip).bend : 0);
     if (scn.tool && scn.curl) scn.curl.R = (scn.tool.grip || IMPLEMENTS[name].grip).curl;
@@ -2578,12 +3127,115 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   scn.dispose = () => {
     if (scn.bench) { parent.remove(scn.bench); scn.bench.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
     scn.bench = null;
-    for (const ch of [g, s]) { const u = ch.mesh.material.userData.uniforms; u.uPressAmt.value = 0; u.uPressAmt2.value = 0; }
+    for (const ch of [g, s]) { const u = ch.mesh.material.userData.uniforms; u.uPressAmt.value = 0; u.uPressAmt2.value = 0; u.uCapN.value = 0; }
     setSkirtOff(s, false);
     setLowered(s, 'bottom', false);
     scn.setImplement('hand');   // the implement is put down
   };
   return scn;
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// FACES in the discipline scene (opts.faces). Two layers of expression, set each frame from the scene (faceState) and
+// layered with setMoods:
+//   the subject — a slow baseline from how worked up they are (the model's distress and how hard recent smacks landed:
+//     composed → strain → distress), with the fast beats on top: dread while the arm waits raised, a wince at contact
+//     (as sharp as the sting that got through the clothing), a breath out after. Tolerance masks it (a stoic face holds
+//     until they're near their limit), a low tolerance shows early; `expressive` on a preset scales it.
+//   the disciplinarian — their severity: calm (light) → focused (medium) → stern (firm, severe), with effort on the swing,
+//     and an easing of the face as the subject nears too harsh. `scn.severity` (0–1) sets it, otherwise it follows
+//     the strikes' strength and speed. `expressive` scales it per character.
+// Glances (relative animation, the anchored poses stay put): the eyes, and a little of the head and neck, turn to the
+// other's face and back — the subject peeks back as the arm waits and after a smack, the disciplinarian checks the
+// subject's face as the arm rises and reads their reaction after a landing (longer for firmer correction) and keeps looking
+// as the subject nears too harsh. The subject's head also tosses a little on contact.
+// ════════════════════════════════════════════════════════════════
+const FACE = {
+  HEAT_TAU: 8, WINCE_TAU: 1.1,
+  SUBJ_HEAD_CAP: 0.5, GIVER_HEAD_CAP: 0.6, HEAD_FLINCH: 0.1,   // radians
+  EYE_GAIN: 2.2,
+};
+const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const glanceW = G => { if (!G) return 0; const t = G.f.t - G.t0; return t < 0 || t > G.dur ? 0 : Math.min(1, t / 0.25, (G.dur - t) / 0.35); };
+function faceState(scn, dt) {
+  const g = scn.g, s = scn.s, P = scn.pain;
+  const f = scn.fx || (scn.fx = { t: 0, heat: 0, wince: 0, since: 9, impacts: 0, ps: 0, exert: 0, sG: null, gG: null, sGw: 0, gGw: 0 });
+  f.t += dt; f.since += dt;
+  const swing = scn.swing, prev = f.ps;
+  f.wince *= Math.exp(-dt / FACE.WINCE_TAU); f.heat *= Math.exp(-dt / FACE.HEAT_TAU);
+  const d = P ? P.distress() : 0;
+  const sev = scn.severity != null ? scn.severity : clamp(0.75 * (scn.lastStrength != null ? scn.lastStrength : 0.5) + 0.25 * clamp((scn.timing.speed - 0.6) / 1.0, 0, 1), 0, 1);
+  const L = clamp(f.heat * 0.85 + d * 1.6, 0, 1);     // how worked up they look
+  const tol = P ? P.stats.tolerance : (s.spec.m.tolerance != null ? s.spec.m.tolerance : 0.5);
+  // The subject's mask: stoic holds until near the limit; low tolerance shows early.
+  const sA = clamp((1 - 0.35 * clamp((tol - 0.4) / 0.4, 0, 1) * (1 - ss(0.25, 0.6, L))) * (1 + 0.25 * clamp((0.5 - tol) / 0.3, 0, 1)) * (s.spec.m.expressive != null ? s.spec.m.expressive : 1), 0, 1.15);
+  const gA = clamp(g.spec.m.expressive != null ? g.spec.m.expressive : 1, 0, 1.2);
+
+  // A smack landed.
+  if (scn.impacts !== f.impacts) {
+    f.impacts = scn.impacts; f.since = 0;
+    const h = scn.lastHit, r = h ? h.reaction : scn.reaction;
+    let share = 0.5;
+    if (P && P.last) share = P.last.sting / Math.max(1e-6, P.last.sting + P.last.ache);
+    f.wince = Math.max(f.wince, Math.min(1, 1.6 * r * (0.35 + 0.65 * Math.min(1, share * 1.6))));
+    f.heat += (r - f.heat) * 0.5;
+    // The disciplinarian reads the reaction (a longer look for firmer correction); the subject looks back once the sting passes, if composed.
+    f.gG = { f, t0: f.t + 0.2, dur: 0.7 + 1.0 * sev };
+    if (Math.random() < 0.5 * (1 - ss(0.4, 0.8, L))) f.sG = { f, t0: f.t + 0.9 + Math.random() * 0.7, dur: 0.7 + Math.random() * 0.5 };
+  }
+  // The arm comes up: the disciplinarian checks the subject's face; the subject may peek back.
+  if (swing > 0.6 && prev <= 0.6) {
+    f.gG = { f, t0: f.t, dur: 0.8 + 0.5 * (1 - sev) };
+    if (Math.random() < 0.65 * (1 - ss(0.5, 0.9, L))) f.sG = { f, t0: f.t + 0.3 + Math.random() * 0.5, dur: 0.7 + Math.random() * 0.5 };
+  }
+  f.ps = swing;
+  const striking = swing > 1.05 && swing < 1.95 && swing >= prev - 1e-6;
+  const ease = P ? Math.max(ss(1.1, PAIN.TOO_HARSH, d), P.tooHarsh ? 1 : 0) : 0;
+  let gT = glanceW(f.gG); if (swing > 1.05 && swing < 1.95) gT = 0; gT = Math.max(gT, 0.85 * ease);
+  let sT = glanceW(f.sG) * (1 - ss(0.75, 1.0, L));   // at the edge, eyes shut: no peeking
+  f.gGw += (gT - f.gGw) * (1 - Math.exp(-dt * 7)); f.sGw += (sT - f.sGw) * (1 - Math.exp(-dt * 7));
+
+  // Subject moods.
+  const dread = ss(0.45, 1, swing) * (swing <= 1.02 ? 1 : 1 - ss(1.02, 1.35, swing)) * (0.45 + 0.55 * Math.min(1, scn.raisedT / 0.9));
+  const exhale = ss(0.7, 1.2, f.since) * (1 - ss(1.8, 2.8, f.since)) * (0.3 + 0.7 * Math.min(1, L * 2)) * (1 - dread);
+  setMoods(s, { dread: dread * (0.6 + 0.4 * sA), wince: f.wince * sA, strain: ss(0.12, 0.4, L) * sA, distress: ss(0.3, 0.75, L) * sA, exhale: exhale * sA });
+  // Disciplinarian moods.
+  const stern = ss(0.35, 0.85, sev) * (1 - ease), calm = 1 - ss(0.1, 0.45, sev);
+  f.exert = Math.max(striking ? sev * ss(1.0, 1.8, swing) : 0, f.exert * Math.exp(-dt / 0.5));
+  setMoods(g, { stern: stern * gA, calm: calm * (1 - ease) * gA, focus: (1 - 0.6 * stern) * (1 - ease) * gA, exertion: f.exert * gA, ease: ease * gA });
+
+  // Flinch: the subject's head tosses on contact.
+  f.flinch = f.wince * sA;
+}
+// The subject's head and neck, after the pose: a glance at the disciplinarian's face and the flinch (the hands and feet are
+// anchored, so these are small and the neck and head only; less where the hands are on the head).
+const _fa = new THREE.Vector3(), _fw = new THREE.Vector3(), _fu = new THREE.Vector3(0, 1, 0);
+function faceBody(scn) {
+  const f = scn.fx, s = scn.s, g = scn.g;
+  if (!f) return;
+  const cap = FACE.SUBJ_HEAD_CAP * (scn.atHead ? 0.4 : 1);
+  if (f.sGw > 0.01) lookAt(s, g.bones.head.getWorldPosition(_fw), cap * f.sGw);
+  if (f.flinch > 0.02) {
+    const fwd = _fa.set(0, 0, 1).applyQuaternion(s.bones.head.getWorldQuaternion(new THREE.Quaternion()));
+    const ax = fwd.clone().cross(_fu);
+    if (ax.lengthSq() > 1e-6) rotateBoneWorld(s.bones.head, new THREE.Quaternion().setFromAxisAngle(ax.normalize(), FACE.HEAD_FLINCH * (scn.atHead ? 0.5 : 1) * f.flinch));
+  }
+}
+// Where the eyes go: the disciplinarian's to the target, drifting to the subject's face as they glance; the subject's
+// to the disciplinarian's face when they glance. Set after the heads have turned, so the eyes make up what's left.
+function faceGaze(scn, target) {
+  const f = scn.fx, g = scn.g, s = scn.s;
+  if (!f) return;
+  const eyes = (ch, point, w) => {
+    const hq = ch.bones.head.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const v = point.clone().sub(ch.bones.head.getWorldPosition(new THREE.Vector3())).applyQuaternion(hq).normalize();
+    ch.gazeFx = { x: clamp(v.x * FACE.EYE_GAIN, -1, 1), y: clamp(v.y * FACE.EYE_GAIN, -1, 1), w };
+  };
+  const sHead = s.bones.head.getWorldPosition(new THREE.Vector3()), gHead = g.bones.head.getWorldPosition(new THREE.Vector3());
+  eyes(g, target.clone().lerp(sHead, f.gGw), 0.85);
+  s.gazeFx = null;
+  if (f.sGw > 0.01) eyes(s, gHead, f.sGw);
 }
 
 function updateScene(scn, dt) {
@@ -2609,7 +3261,7 @@ function updateScene(scn, dt) {
     // end of the cycle (e.g. impact with a zero contact hold) still fires as it wraps.
     const raw = prev + dt;
     const crossed = at => (prev < at && raw >= at) || (prev < at + P && raw >= at + P);
-    if (crossed(t3)) { scn.reaction = 1; scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side); if (scn.onImpact) scn.onImpact(scn.side, 1); }
+    if (crossed(t3)) { scn.reaction = scn.land(1); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side); if (scn.onImpact) scn.onImpact(scn.side, 1); }
     if (crossed(t1)) scn.side = scn.side === 'L' ? 'R' : 'L';            // alternate at the top of the lift
     scn.reaction *= Math.exp(-dt * 3.2);
   } else if (scn.mode === 'driven') {
@@ -2627,19 +3279,46 @@ function updateScene(scn, dt) {
     scn.reaction += (reactTarget - scn.reaction) * (1 - Math.exp(-dt * 10));
   }
   if (timed) g.target = scn.giverQ(swing < 0.35 ? 'relaxed' : swing < 1.5 ? 'raised' : 'contact');
+  // The rod lands somewhere new up the glutes each time: redrawn as the arm comes up past the top of the lift.
+  if (scn.tool && scn.tool.rod && scn.prevSwing > 1.2 && swing <= 1.2) scn.rodT = rodRoll();
+  scn.prevSwing = swing;
   scn.swing = swing;
+  // The pain model: time spent waiting with the arm raised (dread), and time the hand stays on the skin after a smack.
+  if (Math.abs(swing - 1) < 0.05) scn.raisedT += dt;
+  if (scn.pain) scn.pain.update(dt, swing > 1.95);
+  if (scn.faces) faceState(scn, dt);
+  // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
+  // subject's hips as the arm comes up (about the vertical through the pelvis, so the feet stay put).
+  if (scn.atHead) {
+    const yaw = lerp(HEAD_YAW_RELAXED, scn.yawStrike != null ? scn.yawStrike : HEAD_YAW_STRIKE, easeInOut(clamp(swing / 0.6, 0, 1)));
+    g.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw * Math.PI / 180);
+    g.group.updateMatrixWorld(true);
+  }
 
   // Joint-angle poses (subject blends toward the reaction pose).
   const a = 1 - Math.exp(-dt * 9);
   for (const b of BONES) {
-    _q.copy(SUBJ_BASE_Q[b]).slerp(SUBJ_REACT_Q[timed ? scn.reactSide : scn.reactKey()][b], scn.reaction);
+    _q.copy(scn.baseQ[b]).slerp((scn.buck ? scn.buckQ : scn.reactQ)[timed ? scn.reactSide : scn.reactKey()][b], scn.reaction);
     s.pose[b].slerp(_q, timed ? 1 : a);
     s.bones[b].quaternion.copy(s.pose[b]);
     g.pose[b].slerp(g.target[b], timed ? 1 - Math.exp(-dt * 14) : a);
     g.bones[b].quaternion.copy(g.pose[b]);
   }
+  // Hands on head: struck, the subject rises onto their toes (the feet's pitch is in the reaction pose).
+  if (scn.atHead) {
+    const pitch = scn.buck ? HEAD_BUCK.pitch * Math.PI / 180 * scn.reaction : 0;
+    const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -pitch);   // forward is +X
+    s.group.quaternion.copy(qz).multiply(scn.subjBaseQ);
+    s.group.position.copy(scn.subjBasePos).sub(scn.feetPivot).applyQuaternion(qz).add(scn.feetPivot);
+    if (!scn.buck) s.group.position.y += HEAD_RISE * (s.spec.H / 1.58) * scn.reaction;
+  } else if (scn.atCase && !scn.atKnees && scn.buck) {
+    // Over the case, bucking away from the paddle: the body moves, the feet stay put (the legs' pose does that).
+    s.group.position.copy(scn.subjBasePos).addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), s.spec.H / 1.58 * scn.reaction);
+  }
+  if (scn.atKnees) kneesBody(scn, scn.reaction);
   s.group.updateMatrixWorld(true);
   g.group.updateMatrixWorld(true);
+  if (scn.faces) { faceBody(scn); s.group.updateMatrixWorld(true); }
 
   // Contact points: mesh vertices chosen at build time (see sceneAnchors), taken
   // through full skinning each frame, so the palm sits on the skin as rendered.
@@ -2653,30 +3332,60 @@ function updateScene(scn, dt) {
     const n = A.n.clone().transformDirection(M);
     return { p: p.addScaledVector(n, palm), n };
   };
-  const shoulders = posed('shoulders'), glute = posed('glute');
+  const shoulders = posed(scn.atHead ? 'navel' : scn.atCase ? 'lowback' : 'shoulders'), glute = posed('glute');
   // The resting hand takes the thigh nearer the disciplinarian (subject's left, toward −Z).
-  const knee = posed('kneeL');
+  const knee = posed(scn.atCase ? 'cheekL' : 'kneeL');   // over the case the hand rests by the near cheek instead
   // Left hand: same no-clip rule as the strike — palm set slightly below the skin,
   // and the skin under it compressed onto the palm plane.
   const REST_DEPTH = 0.008;
   const backN = shoulders.n, backSkin = shoulders.p.clone().addScaledVector(backN, -palm);
-  const leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
-  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, 1, '2');
-  const restPt = knee.p, thighN = knee.n;
+  // Hands on head: the left hand eases from hanging at the disciplinarian's side to the navel
+  // as the arm comes up, and presses the skin only once it's there.
+  const navW = scn.atHead || scn.atSpread ? easeInOut(clamp(swing / 0.7, 0, 1)) : 1;
+  const giverRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(g.group.quaternion);
+  let leftPt = backSkin.clone().addScaledVector(backN, 0.0085 * g.spec.H - REST_DEPTH);
+  let hipSelf = null;
+  if (scn.atSpread) {
+    // Spread feet: in every beat the left hand lies on the curve of their own left hip, heel at the top, fingers down
+    // and a little forward round it.
+    const A = scn.hipL, p = g.mesh.boneTransform(A.index, new THREE.Vector3()).applyMatrix4(g.mesh.matrixWorld);
+    const M = g.bones.pelvis.matrixWorld.clone().multiply(g.mesh.skeleton.boneInverses[BONES.indexOf('pelvis')]);
+    const n = A.n.clone().transformDirection(M);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(g.group.quaternion);
+    hipSelf = { p: p.addScaledVector(n, 0.0085 * g.spec.H + 0.002), n, f: new THREE.Vector3(0, -1, 0).addScaledVector(fwd, 0.35).normalize() };
+    leftPt = hipSelf.p.clone();
+  }
+  if (scn.atHead) {
+    const shL0 = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
+    leftPt = shL0.clone().add(new THREE.Vector3(HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion)).lerp(leftPt, navW);
+  }
+  // Over the case, bucking away from the paddle: the hips move under the resting left hand, which holds its place.
+  if (scn.atCase && !scn.atHead && !scn.atKnees && scn.buck) leftPt.addScaledVector(new THREE.Vector3(...CASE_BUCK.shift), -s.spec.H / 1.58 * scn.reaction)
+    .addScaledVector(new THREE.Vector3(...CASE_BUCK.leftHand), s.spec.H / 1.58 * clamp(swing - 1, 0, 1));   // (and a little up and toward the disciplinarian, as set)
+  setPress(s, backSkin.clone().addScaledVector(backN, -REST_DEPTH), backN, 0.065 * g.spec.H / 1.7, scn.atSpread ? 0 : scn.atHead ? clamp((navW - 0.9) / 0.1, 0, 1) : 1, '2');
+  let restPt = knee.p;
+  const thighN = scn.atHead ? giverRight : knee.n;
   // Far-side (right) strikes: the disciplinarian turns their shoulders toward the
   // far glute — a small twist about the vertical, split across the spine, that
   // brings the right shoulder forward over the target. It builds through the
   // downswing and releases as the hand lifts.
   // A wide implement lands on both sides at once, so there's no far side to turn toward.
-  const FAR_TURN = 20 * Math.PI / 180, wide = !!(scn.tool && scn.tool.wide);
+  const FAR_TURN = (scn.atHead ? HEAD_FAR_TURN : 20) * Math.PI / 180, wide = !!(scn.tool && scn.tool.wide);
   const turnAmt = scn.side === 'R' && !wide ? FAR_TURN * (t => t * t * (3 - 2 * t))(clamp(swing - 1, 0, 1)) : 0;
   if (turnAmt > 0) {
     const upAxis = new THREE.Vector3(0, 1, 0);
     rotateBoneWorld(g.bones.spine1, new THREE.Quaternion().setFromAxisAngle(upAxis, turnAmt * 0.45));
     rotateBoneWorld(g.bones.spine2, new THREE.Quaternion().setFromAxisAngle(upAxis, turnAmt * 0.55));
+    if (scn.atCase) {
+      const f = turnAmt / FAR_TURN;
+      g.bones.spine2.rotateX((scn.atHead ? HEAD_FAR_LEAN : CASE_FAR_LEAN) * Math.PI / 180 * f);
+      g.bones.clavR.quaternion.multiply(new THREE.Quaternion().slerp(degQ(CASE_FAR_CLAV), f));
+    }
     g.group.updateMatrixWorld(true);
   }
   const shR = g.bones.upperArmR.getWorldPosition(new THREE.Vector3());
+  // Hands on head: the swinging hand hangs at the side at rest (an implement with it).
+  if (scn.atHead) restPt = shR.clone().add(new THREE.Vector3(-HEAD_HANG.out, -HEAD_HANG.down, HEAD_HANG.fwd).multiplyScalar(g.spec.H).applyQuaternion(g.group.quaternion));
 
   // Contact delivery. The strike alternates between the left and right glute/thigh
   // fold. Palm flat on the skin with a straight wrist means the forearm lies along
@@ -2691,7 +3400,7 @@ function updateScene(scn, dt) {
   // shader flattens the skin under the palm (see setPress) so it compresses rather
   // than clipping. Candidate forearm lines that pass through the subject's body are
   // rejected, which pushes the elbow away from the body when needed.
-  const PRESS_DEPTH = 0.012;
+  const PRESS_DEPTH = scn.atKnees ? KNEES_PRESS_DEPTH : 0.012;
   const palmHalf = 0.0085 * g.spec.H;
   const pelvisM = s.bones.pelvis.matrixWorld.clone().multiply(s.mesh.skeleton.boneInverses[BONES.indexOf('pelvis')]);
   const sideSign = scn.side === 'L' ? 1 : -1;
@@ -2742,7 +3451,7 @@ function updateScene(scn, dt) {
         const err = Math.abs(E.distanceTo(shR) - L1) + Math.max(0, -f.z) * 0.05 + Math.max(0, f.x) * 0.06
           // Both sides aim for the same height, STRIKE_K steps up the strip from the
           // fold, so left and right contacts match.
-          - 0.08 * clamp(outside, 0, 0.12) + 0.025 * Math.abs(k - STRIKE_K)
+          - 0.08 * clamp(outside, 0, 0.12) + 0.025 * Math.abs(k - (scn.atHead ? HEAD_STRIKE_K : STRIKE_K))
           + 0.06 * Math.max(0, humeralTwist(g, 'R', shR, E, W) - 1.05)   // shoulder twist beyond ~60°
           + 0.0006 * tiltDeg;                                              // prefer a straight wrist
         cands.push({ err, f, E, W, p, n, skin, outside, tiltDeg, k, aim });
@@ -2784,12 +3493,12 @@ function updateScene(scn, dt) {
   const fix = tool && scn.toolFix[scn.implement + (wide ? 'B' : scn.side)];
   const contactPt = wide ? strikeFit.palmC.clone().add(fix || new THREE.Vector3()) : tool ? strike.p.clone().addScaledVector(strike.n, tool.off - 0.004)
     .addScaledVector(strikeFit.f, -tool.along).addScaledVector(thumbW, -tool.across).add(fix || new THREE.Vector3()) : strike.p;
-  let raisedPt = shR.clone().add(new THREE.Vector3(-0.1, 0.3, -0.06).multiplyScalar(g.spec.H / 1.7));
+  let raisedPt = shR.clone().add((scn.atHead ? HEAD_RAISED_HAND : new THREE.Vector3(-0.1, 0.3, -0.06)).clone().multiplyScalar(g.spec.H / 1.7));
   // A wide implement raised (WIDE_RAISED): the blade's face placed and turned from the
   // shoulder, and the palm centre (what the swing moves) where that puts the hand.
   let wideUp = null;
   if (wide) {
-    const R = WIDE_RAISED, T = scn.tool, ax = new THREE.Vector3(...R.axis).normalize(), fN = new THREE.Vector3(...R.faceN);
+    const R = scn.wideRaised, T = scn.tool, ax = new THREE.Vector3(...R.axis).normalize(), fN = new THREE.Vector3(...R.faceN);
     fN.addScaledVector(ax, -fN.dot(ax)).normalize();
     const Q = bladeHandQuat(T, ax, fN.negate());
     const face = shR.clone().addScaledVector(new THREE.Vector3(...R.face), g.spec.H / 1.7);
@@ -2801,16 +3510,37 @@ function updateScene(scn, dt) {
   // reach; otherwise the arm straightens toward the floor and the fingertips touch.
   const floorN = new THREE.Vector3(0, 1, 0);
   const sHand = s.spec.H * 0.106;
-  for (const side of ['L', 'R']) {
+  // Hands on knees: palms on the front of the knees, fingers down, elbows out.
+  if (scn.atKnees) {
+    for (const side of ['L', 'R']) {
+      let knee = s.bones['shin' + side].getWorldPosition(new THREE.Vector3());
+      // Spread: the palms rest on the front of the thigh, 70% of the way down it.
+      if (scn.atSpread) knee = s.bones['thigh' + side].getWorldPosition(new THREE.Vector3()).lerp(knee, 0.7);
+      const rK = s.spec.m.knee / 100 / (2 * Math.PI);
+      const n = new THREE.Vector3(1, 0.1, 0).normalize();
+      const target = knee.clone().addScaledVector(n, rK + 0.0085 * sH + 0.004).add(new THREE.Vector3(0, 0.02 * sH / 1.58, 0));
+      const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+      const out = side === 'L' ? -1 : 1;
+      armIK(s, side, target, sh.clone().add(new THREE.Vector3(-0.1, 0.05, out * 0.5)), n, new THREE.Vector3(0, -1, 0));
+    }
+  }
+  for (const side of scn.atHead || scn.atKnees ? [] : ['L', 'R']) {
     const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
     const out = side === 'L' ? -1 : 1;   // subject's left is world −Z in this orientation
     const pole = sh.clone().add(new THREE.Vector3(-0.4, 0.1, out * 0.25));
     const palmReach = armReach(s, side);
     // Hands stay planted while the body reacts: the palm spot is taken at rest and
     // held until the reaction has settled, rather than following the shoulders.
-    let palmPt = new THREE.Vector3(sh.x + 0.07 * sH, 0.012 * sH, sh.z + out * 0.06 * sH);
+    let palmPt = scn.atCase ? casePalm(s, side, scn.caseTop) : new THREE.Vector3(sh.x + 0.07 * sH, 0.012 * sH, sh.z + out * 0.06 * sH);
     if (!scn.plant[side] || scn.reaction < 0.02) scn.plant[side] = palmPt.clone();
-    else palmPt = scn.plant[side].clone();
+    else {
+      const slideTo = palmPt;
+      palmPt = scn.plant[side].clone();
+      // Over the case the palm stays on the lid however the body moves: it holds its place while
+      // the arm can reach it, and slides back along the lid, flat, when the shoulders rise or draw
+      // away (casePalm is where a nearly straight arm from the shoulder as it is now would land).
+      if (scn.atCase) palmPt.x = Math.min(palmPt.x, slideTo.x);
+    }
     // The flat-palm IK solves for the wrist (palm centre minus half a hand along the
     // fingers), so test reach to that point, not to the palm centre.
     const wristPt = palmPt.clone().addScaledVector(new THREE.Vector3(1, 0, 0), -sHand * 0.42);
@@ -2844,10 +3574,27 @@ function updateScene(scn, dt) {
     } else {
       // Even a vertical hand can't reach: straighten the arm toward the floor and
       // let the fingertips find it (see placeFingertips).
-      const floorPt = new THREE.Vector3(palmPt.x, 0, palmPt.z);
+      const floorPt = new THREE.Vector3(palmPt.x, scn.atCase ? scn.caseTop : 0, palmPt.z);
       const armDir = floorPt.sub(sh).normalize();
       armIK(s, side, sh.clone().addScaledVector(armDir, palmReach * 0.995), pole);
       placeFingertips(s, side);
+    }
+  }
+
+  // Hands on head: palms on the back of the skull, fingers along it, elbows out.
+  if (scn.atHead) {
+    const M = s.bones.head.matrixWorld, hp = scn.headPrim, hv = HEAD_PALM;
+    for (const side of ['L', 'R']) {
+      const sg = side === 'L' ? 1 : -1;
+      const d = new THREE.Vector3(hv.dir[0] * sg, hv.dir[1], hv.dir[2]).normalize();
+      const surf = hp.c.clone().add(new THREE.Vector3(d.x * hp.r.x, d.y * hp.r.y, d.z * hp.r.z)).applyMatrix4(M);
+      const n = new THREE.Vector3(d.x / hp.r.x, d.y / hp.r.y, d.z / hp.r.z).normalize().transformDirection(M);
+      const target = surf.addScaledVector(n, 0.0085 * s.spec.H + hv.lift);
+      const fingers = new THREE.Vector3(hv.fingers[0] * sg, hv.fingers[1], hv.fingers[2]).transformDirection(M);
+      const sh = s.bones['upperArm' + side].getWorldPosition(new THREE.Vector3());
+      const out = side === 'L' ? -1 : 1;
+      const pole = sh.clone().add(new THREE.Vector3(hv.pole[0], hv.pole[1], hv.pole[2] * out));
+      armIK(s, side, target, pole, n, fingers);
     }
   }
 
@@ -2857,16 +3604,20 @@ function updateScene(scn, dt) {
   // offsets, with the fingers forward, plus a correction learnt at rest (below).
   const REST_TILT = 18 * Math.PI / 180;
   const restSkin = restPt.clone().addScaledVector(thighN, -palm);
-  let restAt = restPt;
+  let restAt = scn.atCase && !scn.atHead && !tool ? restPt.clone().addScaledVector(thighN, CASE_REST_HOVER) : restPt;
   // A wide implement rests across both sites, flat on the seat (its fit's `rest`), lifted
   // off the skin to REST_GAP (no compression), plus its own correction learnt at rest.
   const wideRest = wide ? strikeFit.rest : null;
-  if (wide) restAt = wideRest.palmC.clone().addScaledVector(wideRest.n, WIDE_DEPTH + REST_GAP)
+  if (wide) restAt = wideRest.palmC.clone().addScaledVector(wideRest.n, scn.wideRest ? 0 : WIDE_DEPTH + REST_GAP)
     .add(scn.toolFix[scn.implement + 'rest'] || new THREE.Vector3());
   else if (tool) {
     const thumbR = fingersFwd.clone().cross(thighN.clone().negate()).normalize();
     restAt = restSkin.clone().addScaledVector(thighN, tool.off + REST_GAP).addScaledVector(fingersFwd, -tool.along)
       .addScaledVector(thumbR, -tool.across).add(scn.toolFix[scn.implement + 'rest'] || new THREE.Vector3());
+  }
+  if (scn.atKnees && !wide) {
+    const R = tool ? KNEES_REST.brush : KNEES_REST.hand;
+    restAt = restAt.clone().add(new THREE.Vector3(...R.delta).multiplyScalar(g.spec.H / 1.72));
   }
   const want = swing <= 1 ? restAt.clone().lerp(raisedPt, swing) : raisedPt.clone().lerp(contactPt, swing - 1);
   // A wide implement's fist runs from the hip to above the shoulder: a straight line would
@@ -2881,7 +3632,7 @@ function updateScene(scn, dt) {
   // The lean is capped (~8°) so it stays a subtle adjustment; the swinging arm
   // isn't included at contact — the strike search fits the arm to the torso instead.
   const reachTargets = [['L', scn.handL]];
-  if (swing < 0.3) reachTargets.push(['R', scn.handR]);
+  if (swing < 0.3 && !scn.atKnees) reachTargets.push(['R', scn.handR]);   // (hands on knees: the hanging hand never leans the body)
   const pivot = new THREE.Vector3(), shW = new THREE.Vector3();
   const MAX_LEAN = 0.14;
   let leaned = 0;
@@ -2908,17 +3659,33 @@ function updateScene(scn, dt) {
   // Capped low so the face stays readable from the front; the eyes imply the rest.
   // `scn.gaze = 'head'` turns the look to the back of the subject's head instead (aftercare).
   if (scn.gaze === 'head') lookAt(g, s.bones.head.getWorldPosition(new THREE.Vector3()), 0.7);
+  else if (scn.faces && scn.fx && scn.fx.gGw > 0.01) lookAt(g, glute.p.clone().lerp(s.bones.head.getWorldPosition(new THREE.Vector3()), scn.fx.gGw), lerp(0.42, FACE.GIVER_HEAD_CAP, scn.fx.gGw));
   else lookAt(g, glute.p, 0.42);
+  scn._glutePt = glute.p;
+  // Over the case, the paddle's contact twists the back, so the look is trimmed back toward the subject.
+  if (scn.atCase && !scn.atHead && scn.tool && scn.tool.wide && swing > 1) {
+    const w = clamp(swing - 1, 0, 1);
+    for (const b of ['neck', 'head']) g.bones[b].quaternion.multiply(new THREE.Quaternion().slerp(degQ(CASE_PADDLE_GAZE[b]), w));
+    g.bones.neck.updateMatrixWorld(true);
+  }
+  if (scn.atHead) {
+    // The gaze trim comes in as the arm rises and stays through contact (raised's offsets easing to contact's).
+    const w = clamp(swing, 0, 1), c = clamp(swing - 1, 0, 1);
+    if (w > 0) for (const b of ['neck', 'head']) g.bones[b].quaternion.multiply(
+      degQ(HEAD_GAZE.raised[b]).clone().slerp(degQ(HEAD_GAZE.contact[b]), c).slerp(new THREE.Quaternion(), 1 - w));
+    g.bones.neck.updateMatrixWorld(true);
+  }
 
   // Elbow poles: tucked at rest, up and back when raised, then wherever the strike
   // fit puts it at contact.
   const POLE_REST = new THREE.Vector3(-0.1, -0.15, -0.5);
-  const POLE_RAISED = new THREE.Vector3(-0.3, 0.2, -0.45);
+  const POLE_RAISED = scn.atHead ? HEAD_POLE_RAISED : new THREE.Vector3(-0.3, 0.2, -0.45);
   const poleStrike = strikeFit.E.clone().sub(shR);
   // (A wide implement's elbow starts where its rest fit puts it.)
   const poleUp = wide ? wideUp.pole : POLE_RAISED;
-  const poleOff = swing <= 1 ? (wide ? wideRest.E.clone().sub(shR) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
-  const poleR = shR.clone().add(poleOff);
+  const poleOff = swing <= 1 ? (wide ? (wideRest.pole || wideRest.E.clone().sub(shR)) : scn.atKnees ? new THREE.Vector3(...(tool ? KNEES_REST.brush : KNEES_REST.hand).pole) : POLE_REST).clone().lerp(poleUp, swing) : poleUp.clone().lerp(poleStrike, swing - 1);
+  // (Hands on head: from where the shoulder is now, after the lean, so the set elbow directions hold.)
+  const poleR = (scn.atHead ? g.bones.upperArmR.getWorldPosition(new THREE.Vector3()) : shR).clone().add(poleOff);
   // Swinging hand: flat on the thigh at rest; palm forward when raised, turning
   // toward the target during the strike; flat on the target, wrist straight, at contact.
   // Resting an implement, the palm tilts REST_TILT so the head end dips onto the thigh
@@ -2929,8 +3696,11 @@ function updateScene(scn, dt) {
     const dW = fingersFwd.clone().cross(thighN.clone().negate()).normalize().addScaledVector(fingersFwd, 0.15).normalize();
     restN = thighN.clone().multiplyScalar(Math.cos(REST_TILT)).addScaledVector(dW, Math.sin(REST_TILT)).normalize();
   }
-  const flatR = swing < 0.3 ? restN : swing > 1.9 ? strike.n : null;
-  const palmToTarget = flatR ? null : new THREE.Vector3(0, 0, 1)
+  if (scn.atKnees && tool && !wide) restN = new THREE.Vector3(...KNEES_REST.brush.n);
+  // Hanging at the side the palm faces the body, the fingers continuing the forearm.
+  const sideIn = giverRight.clone().negate();
+  const flatR = swing < 0.3 && !scn.atHead ? restN : swing > 1.9 ? strike.n : null;
+  const palmToTarget = flatR ? null : (scn.atHead ? sideIn.clone().lerp(new THREE.Vector3(0, 0, 1), clamp(swing, 0, 1)).normalize() : new THREE.Vector3(0, 0, 1))
     .lerp(contactPt.clone().sub(scn.handR).normalize(), clamp(swing - 1, 0, 1)).normalize();
   const atContact = swing > 1.9;
   if (wide) {
@@ -2946,7 +3716,7 @@ function updateScene(scn, dt) {
     // the elbow clear, and may put it behind the back.)
     armIK(g, 'R', scn.handR.clone().sub(T.palmC.clone().applyQuaternion(scn.handQ)), poleR, null, null, null, false, true);
     setHandWorld(g, 'R', scn.handQ);
-  } else armIKClear(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);
+  } else (scn.atHead && swing > 0.3 && swing < 1.6 ? armIK : armIKClear)(g, 'R', scn.handR, poleR, flatR, atContact ? strikeFit.f : scn.atKnees && tool && swing < 0.3 ? new THREE.Vector3(0, -1, 0) : fingersFwd, palmToTarget, atContact && !strikeFit.tiltDeg);   // hands on head: the raised elbow goes where the pole puts it
   // Implement on the skin: where its striking face actually is against where it should
   // be (4 mm into the skin, like the palm), and half the difference into the correction.
   // The same at rest, so it lies on the thigh without sinking in: across the skin, the
@@ -2957,7 +3727,7 @@ function updateScene(scn, dt) {
   // a nearest-skin-point test is fooled in creases (thigh against glute). Refitted every
   // third frame.
   scn.restTick = (scn.restTick || 0) + 1;
-  if (tool && !wide && swing < 0.03 && tool.probes && scn.restTick % 3 === 0) {
+  if (tool && !wide && !scn.atKnees && swing < 0.03 && tool.probes && scn.restTick % 3 === 0) {
     g.bones.handR.updateMatrixWorld(true);
     const M = g.bones.handR.matrixWorld, face = tool.face.clone().applyMatrix4(M);
     const low = restClearance(s, tool.probes, M);
@@ -2989,7 +3759,7 @@ function updateScene(scn, dt) {
         : -seatExcess(seatPoints(scn), faceW, n, F.a, tool);
       const plan = onSkin ? strikeFit.face : wideRest.faceRest;
       const across = plan.clone().sub(faceW); across.addScaledVector(n, -across.dot(n));
-      const err = across.addScaledVector(n, (onSkin ? -WIDE_CONTACT.depth : REST_GAP) - low);
+      const err = across.addScaledVector(n, (onSkin ? -(tool.rod ? ROD_DEPTH : scn.wideContact.depth) : REST_GAP) - low);
       const key = scn.implement + (onSkin ? 'B' : 'rest'), cur = scn.toolFix[key] || new THREE.Vector3();
       if (err.length() < 0.15) scn.toolFix[key] = cur.addScaledVector(err, 0.5).clampLength(0, 0.1);
     }
@@ -3002,7 +3772,9 @@ function updateScene(scn, dt) {
     setPress(s, faceW, strikeFit.n, (T.halfW + 0.015) / 0.55, amt, '', strikeFit.a, T.halfLen - T.halfW, deep);
   }
   const shL = g.bones.upperArmL.getWorldPosition(new THREE.Vector3());
-  armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), backN, fingersFwd);
+  if (scn.atSpread) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(...SPREAD_HANG_POLE_L)), hipSelf.n, hipSelf.f);   // on their own hip
+  else if (scn.atHead && navW < 0.98) armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), null, null, giverRight);   // hanging: palm to the thigh
+  else armIKClear(g, 'L', scn.handL, shL.clone().add(new THREE.Vector3(0.1, -0.15, -0.5)), backN, scn.atHead ? HEAD_NAVEL_FINGERS : fingersFwd);
 
   // Fingers follow the skin under each hand: the palm is rigid and flat, so on a
   // rounded surface the fingers curl down until their pads meet the skin. The
@@ -3010,24 +3782,37 @@ function updateScene(scn, dt) {
   // open in between.
   if (!scn.patch) {
     const A = scn.anchors;
-    scn.patch = { back: skinPatch(s, A.shoulders.index, 0.14), knee: skinPatch(s, A.kneeL.index, 0.14),
-      L: skinPatch(s, A.foldL[STRIKE_K].index, 0.16), R: skinPatch(s, A.foldR[STRIKE_K].index, 0.16) };
+    scn.patch = { back: skinPatch(s, (scn.atHead ? A.navel : scn.atCase ? A.lowback : A.shoulders).index, 0.14), knee: skinPatch(s, (scn.atCase ? A.cheekL : A.kneeL).index, 0.14),
+      L: skinPatch(s, A.foldL[scn.atHead ? HEAD_STRIKE_K : STRIKE_K].index, 0.16), R: skinPatch(s, A.foldR[scn.atHead ? HEAD_STRIKE_K : STRIKE_K].index, 0.16) };
     scn.curl = { L: null, R: null };
   }
   const onSkin = idx => { const pts = posePatch(s, idx); return q => skinSignedDist(pts, q); };
-  const wantL = wrapFingers(g, 'L', onSkin(scn.patch.back));
+  if (scn.atSpread && !scn.patch.hipL) scn.patch.hipL = skinPatch(g, scn.hipL.index, 0.14);
+  const wantL = scn.atSpread ? wrapFingers(g, 'L', (pts => q => skinSignedDist(pts, q))(posePatch(g, scn.patch.hipL))) : scn.atHead && navW < 0.5 ? 12 : wrapFingers(g, 'L', onSkin(scn.patch.back));
   const wantR = tool ? (tool.grip || IMPLEMENTS[scn.implement].grip).curl   // closed round the implement's handle
-    : swing < 0.3 ? wrapFingers(g, 'R', onSkin(scn.patch.knee))
+    : swing < 0.3 ? (scn.atHead ? 12 : wrapFingers(g, 'R', onSkin(scn.patch.knee)))
     : swing > 1.9 ? wrapFingers(g, 'R', onSkin(scn.patch[scn.side])) : 4;
   const k = timed ? 1 - Math.exp(-dt * 30) : a;
   for (const [side, want] of [['L', wantL], ['R', wantR]]) {
     scn.curl[side] = scn.curl[side] == null ? want : scn.curl[side] + (want - scn.curl[side]) * k;
     setFingerCurl(g, side, scn.curl[side]);
   }
+  if (scn.atCase && !scn.atHead) {
+    g.bones.thumbL.quaternion.copy(degQ(CASE_THUMB_L));
+    // The resting hand's thumb is tucked in, easing out as the hand lifts to swing.
+    if (!tool && !wide) g.bones.thumb2R.quaternion.slerp(degQ(CASE_REST_THUMB), clamp(1 - swing / 0.3, 0, 1));
+    g.bones.thumbL.updateMatrixWorld(true); g.bones.thumb2R.updateMatrixWorld(true);
+  }
   if (tool && tool.thumbQ) { g.bones.thumbR.quaternion.copy(tool.thumbQ[0]); g.bones.thumb2R.quaternion.copy(tool.thumbQ[1]); }   // round the handle
   // A wide implement's fingers take WIDE_RAISED's pose toward the top of the swing.
   const up = wide ? clamp(1 - Math.abs(swing - 1), 0, 1) : 0;
-  if (up > 0) { g.bones.fingersR.quaternion.slerp(degQ(WIDE_RAISED.fingers), up); g.bones.fingersR.updateMatrixWorld(true); }
+  if (up > 0) { g.bones.fingersR.quaternion.slerp(degQ(scn.wideRaised.fingers), up); g.bones.fingersR.updateMatrixWorld(true); }
+  // The fingers dent the skin they press, as the palm does: the resting left hand always,
+  // the swinging hand once it's on the skin (not when it holds an implement: its fingers
+  // are round the handle, and the implement presses the skin through the palm's press).
+  setFingerCaps(s, g, 'L', 1);
+  if (!tool) setFingerCaps(s, g, 'R', clamp((swing - 1.75) / 0.25, 0, 1), true);
+  if (scn.faces && scn._glutePt) { g.group.updateMatrixWorld(true); faceGaze(scn, scn._glutePt); }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -3055,7 +3840,12 @@ const IMPLEMENTS = {
   // `giver`: layers over the disciplinarian's beat poses while this implement is held. The
   // paddle's contact keeps the relaxed torso (the pose editor's pose was set on it) and
   // lifts the right shoulder a little; raised, the shoulder draws back.
-  paddle:    { mark: 8 / 3, build: buildPaddle, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
+  // `giverCase`: over the case the stance is the position's own; the paddle only twists the upper back toward
+  // the subject on contact (from a pose-editor report).
+  // `dual`: lands on both sides at once; the only kind the spread-feet position offers.
+  // `stripe`: leaves a stripe where it lands (see addStripe) instead of building the glutes' colour.
+  rod:       { mark: 0, dual: true, stripe: true, build: buildRod },
+  paddle:    { mark: 8 / 3, dual: true, build: buildPaddle, giverCase: { contact: { spine2: [10, 36, 0], clavL: [-1.4, 2.5, -10.1] } }, giver: { raised: { clavR: [8.9, -11.9, 3.2] }, contact: { spine1: [8, 0, 0], spine2: [0, 0, 0], neck: [10, 0, 0], clavR: [2.5, 4.2, -8] } } },
 };
 const REST_GAP = 0.001;   // an implement at rest: its lowest point this far off the skin
 const REST_SEGS = [['pelvis', 'spine1'], ['thighL', 'shinL'], ['thighR', 'shinR'], ['shinL', 'footL'], ['shinR', 'footR']];
@@ -3237,8 +4027,32 @@ function flatGrip(H, a, b, rc, back, lean, seat) {
 // `along` the fingers and `palmN` out of the palm); `grip`, the fist that holds it, and
 // `thumbQ`, the thumb bone's turn onto the handle's front face; and
 // `probes` as the hairbrush's, with `faceProbes` just the striking face's.
-function buildPaddle(g) {
-  const H = g.spec.H, hl = 0.106 * H, side = 'R', P = PADDLE;
+// The rod: a plain cylinder, a little longer than the paddle (46 cm to its 43) and as thick as the hair brush's handle
+// (22 mm), held in the fist like the paddle's handle. It uses the paddle's grip and fit (`buildPaddle(g, true)`).
+// How far the rod's line sinks into the higher site at contact (the press then flattens the skin round it).
+const ROD_DEPTH = 0.004;
+// How far (× the glute's height) the rod's strikes reach: from this far down from the top of the glute to this far down the thigh
+// below the fold. Strikes favour the upper half of that range (ROD_UPPER of them land there).
+const ROD_REACH = 0.25, ROD_UPPER = 0.7;
+// The rod's own contact settings per position (pose-editor reports, 14:49, Kenji with Aya): `roll` is the angle its face turns
+// from straight down about the line between the sites (where the default is the surface's own normal), `elbow` the upper
+// arm's direction from the shoulder in the torso's frame, and, for hands on head, where the disciplinarian stands (`at`, m)
+// and the strike's turn (`yawStrike`, degrees), which then holds for every beat.
+// The rod raised in the spread-feet position (14:54 report, Kenji with Aya): the face centre from the right shoulder (m, 1.7 m
+// tall), its normal and long axis (world), and the upper arm's direction from the shoulder (the elbow out to the side).
+const ROD_RAISED_SPREAD = { face: [-0.122, 0.447, 0.164], faceN: [-0.323, -0.377, 0.868], axis: [0.830, 0.329, 0.451], elbow: [-0.987, 0.162, -0.011] };
+const ROD_CONTACT = {
+  lap:  { roll: 52.9, elbow: [-0.22, -0.612, -0.76] },
+  case: { roll: 82.5, elbow: [-0.143, -0.882, 0.449] },
+  head: { elbow: [0.231, -0.71, 0.665], at: [-0.249, -0.493], yawStrike: 1 },
+  knees: { elbow: [-0.153, -0.881, 0.447] },
+};
+const ROD = { len: 0.43, width: 0.010, thick: 0.010, corner: 0.004, neck: 0, handle: 0.115, handleW: 0.010, butt: 0.012, lean: 0.25, seat: 0.02 };
+function buildRod(g) { return buildPaddle(g, true); }
+// A strike height along the rod's strip (0 … 11): ROD_UPPER of rolls fall in the upper half, the rest in the lower.
+function rodRoll() { const up = Math.random() < ROD_UPPER; return (up ? 5.5 : 0) + Math.random() * 5.5; }
+function buildPaddle(g, rod = false) {
+  const H = g.spec.H, hl = 0.106 * H, side = 'R', P = rod ? ROD : PADDLE;
   const along = g.bones['fingers' + side].position.clone().normalize();
   const palmN = new THREE.Vector3(along.y, -along.x, 0).normalize().multiplyScalar(-1);   // out of the palm (right hand)
   const across = along.clone().cross(palmN).normalize();                                  // toward the thumb
@@ -3335,10 +4149,17 @@ function buildPaddle(g) {
   shape.lineTo(xn, hy); shape.bezierCurveTo(xn - P.neck * 0.45, hy, xs + P.neck * 0.55, hh, xs, hh);
   shape.lineTo(b0 + rb, hh); shape.quadraticCurveTo(b0, hh, b0, hh - rb);
   shape.lineTo(b0, -hh + rb); shape.quadraticCurveTo(b0, -hh, b0 + rb, -hh);
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: P.thick - 2 * bev, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 10 });
-  geo.translate(0, 0, -(P.thick - 2 * bev) / 2);
+  let geo;
+  if (rod) {
+    // One round bar from the butt to the tip, its axis along the board's length.
+    geo = new THREE.CylinderGeometry(P.thick / 2, P.thick / 2, xt - xb, 28);
+    geo.rotateZ(Math.PI / 2); geo.translate((xb + xt) / 2, 0, 0);
+  } else {
+    geo = new THREE.ExtrudeGeometry(shape, { depth: P.thick - 2 * bev, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 10 });
+    geo.translate(0, 0, -(P.thick - 2 * bev) / 2);
+  }
   geo.computeVertexNormals();
-  const wood = new THREE.MeshStandardMaterial({ color: lin(0x6e4424), roughness: 0.5, metalness: 0 });
+  const wood = new THREE.MeshStandardMaterial({ color: lin(rod ? 0xc99a5b : 0x6e4424), roughness: rod ? 0.4 : 0.5, metalness: 0 });
   const board = new THREE.Mesh(geo, wood);
   board.position.copy(gripC);
   board.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(d, w, palmN));
@@ -3365,7 +4186,7 @@ function buildPaddle(g) {
     probes.push([knuckle.clone().addScaledVector(along, ax + (bx - ax) * t).addScaledVector(palmN, ay + (by - ay) * t)
       .addScaledVector(across, offF * FINGER_PITCH * H), grip.fR]);
   }
-  return { grp, probes, faceProbes, wide: true, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: P.width / 2,
+  return { grp, probes, faceProbes, wide: true, rod, face: faceC, faceN: palmN.clone(), axis: d, halfLen: P.len / 2, halfW: rod ? 0.008 : P.width / 2,   // (a rod's footprint is a narrow strip)
     palmC: along.clone().multiplyScalar(0.42 * hl), along, palmN, grip: { curl: grip.curl, bend: grip.bend },
     thumbQ, thumbFit: thumbFit && { near: thumbFit.near, al: thumbFit.al, be: thumbFit.be, ga: thumbFit.ga, ph: thumbFit.ph, pi: thumbFit.pi, on: thumbFit.on }, handleSpan: [xb, xs] };
 }
@@ -3445,6 +4266,25 @@ const WIDE_YAW = 32;        // degrees the blade may turn off the sites' line, w
 // by height, it suits Kenji as it is.
 const WIDE_RAISED = { face: [-0.2491, 0.3825, 0.089], faceN: [0.651, -0.455, 0.607], axis: [0.185, 0.871, 0.454],
   elbow: [-0.3756, 0.247, -0.8932], fingers: [3, 0, 70] };
+// Over the case the sites face backward and up rather than up the body, so the blade's roll is
+// its own (from the viewer's pose editor); the raised blade is turned with the disciplinarian.
+const CASE_WIDE_CONTACT = { roll: 82.5, yaw: 0, slide: 0, drop: 0.01, depth: 0.02, elbow: [-0.7, -0.45, -0.55] };
+// The blade at rest over the case, from the viewer's pose editor (Kenji with Aya): held low at the
+// right side, its face turned toward the subject. Face centre from the right shoulder (m, for 1.7 m
+// tall), the face's normal and long axis, all in the frame before the disciplinarian's yaw.
+const CASE_WIDE_REST = { face: [0.001, -0.661, 0.201], faceN: [0.967, -0.191, -0.167], axis: [0.135, -0.171, 0.976], elbow: [-0.174, -0.956, -0.237] };
+function caseWideRest(yaw = CASE_YAW) {
+  const c = Math.cos(yaw * Math.PI / 180), s = Math.sin(yaw * Math.PI / 180);
+  const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
+  const R = CASE_WIDE_REST;
+  return { face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
+}
+function caseWideRaised(yaw = CASE_YAW) {
+  const c = Math.cos(yaw * Math.PI / 180), s = Math.sin(yaw * Math.PI / 180);
+  const rot = ([x, y, z]) => [x * c + z * s, y, -x * s + z * c];
+  const R = WIDE_RAISED;
+  return { ...R, face: rot(R.face), faceN: rot(R.faceN), axis: rot(R.axis), elbow: rot(R.elbow) };
+}
 const WIDE_CONTACT = { roll: 58.2, yaw: 2.7, slide: 0.0083, drop: 0.0158, depth: 0.02, elbow: [-0.0771, -0.4957, -0.865] };
 // How far the upper arm can go behind the plane of the chest, degrees. Measured from that
 // plane rather than from hanging down, since the elbow can go back a long way once it's
@@ -3461,7 +4301,16 @@ function bladeHandQuat(T, a, n) {
 }
 function wideFit(scn, posed, shR, palm) {
   const g = scn.g, s = scn.s, T = scn.tool;
-  const site = key => { const ps = posed(scn.anchors[key][STRIKE_K]); return { skin: ps.p.clone().addScaledVector(ps.n, -palm), n: ps.n.clone() }; };
+  const site = key => {
+    const strip = T.rod ? scn.anchors[key === 'foldL' ? 'rodL' : 'rodR'] : scn.anchors[key];
+    if (T.rod) {
+      // The rod lands anywhere up the glutes' height: `scn.rodT` runs from the fold (0) to the top of the strip (7).
+      const k0 = Math.floor(clamp(scn.rodT, 0, strip.length - 1 - 1e-6)), f = clamp(scn.rodT, 0, strip.length - 1) - k0, a = posed(strip[k0]), b = posed(strip[Math.min(k0 + 1, strip.length - 1)]);
+      const ps = { p: a.p.clone().lerp(b.p, f), n: a.n.clone().lerp(b.n, f).normalize() };
+      return { skin: ps.p.clone().addScaledVector(ps.n, -palm), n: ps.n };
+    }
+    const ps = posed(strip[scn.atHead ? HEAD_STRIKE_K : STRIKE_K]); return { skin: ps.p.clone().addScaledVector(ps.n, -palm), n: ps.n.clone() };
+  };
   const sL = site('foldL'), sR = site('foldR');
   const C = scn.fitCache.B;
   if (C && C.sh.distanceTo(shR) < 0.01 && C.L.distanceTo(sL.skin) < 0.01 && C.R.distanceTo(sR.skin) < 0.01) return C.fit;
@@ -3526,36 +4375,63 @@ function wideFit(scn, posed, shR, palm) {
   const restCands = [];
   // Roll: n turns about the level line from straight up; coarse, then fine.
   const nAt = th => up.clone().applyAxisAngle(line, th * DEG);
-  let roll = { e: Infinity };
-  for (let th = -78; th <= 78; th += 6) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
-  for (let th = roll.th - 5; th <= roll.th + 5; th += 1) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
-  const n = roll.n;
-  for (let yaw = -WIDE_YAW; yaw <= WIDE_YAW; yaw += 4) {
-    const a = line.clone().applyAxisAngle(n, yaw * DEG);
-    const b = n.clone().cross(a), Q = handQuat(a, n);
-    for (let slide = -WIDE_SLIDE; slide <= WIDE_SLIDE + 1e-6; slide += 0.01) {
-      const c = mid.clone().addScaledVector(a, slide);
-      // Both sites well inside the blade: 3 cm from its ends, 2.5 cm from its sides.
-      const inside = sp => { const d = sp.skin.clone().sub(c); return Math.abs(d.dot(a)) <= T.halfLen - 0.03 && Math.abs(d.dot(b)) <= T.halfW - 0.025; };
-      if (!inside(sL) || !inside(sR)) continue;
-      const e = seatExcess(seat, c, n, a, T);
-      // How far each site is below the face's plane (0 = touching).
-      const gap = Math.max(e - sL.skin.clone().sub(c).dot(n), e - sR.skin.clone().sub(c).dot(n));
-      const face = c.clone().addScaledVector(n, e - WIDE_DEPTH);
-      armCands(restCands, { yaw, slide, a, n, e, gap, Q, face, roll: roll.th, pose: 4 * gap + 0.0004 * Math.abs(yaw) + 0.1 * Math.abs(slide) });
+  let rest;
+  if (scn.wideRest) {
+    // Fixed rest pose (set per position): the blade held at the side, placed from the shoulder.
+    const R = scn.wideRest, fN = new THREE.Vector3(...R.faceN).normalize(), ax = new THREE.Vector3(...R.axis);
+    ax.addScaledVector(fN, -ax.dot(fN)).normalize();
+    const nR = fN.clone().negate(), faceR = shR.clone().addScaledVector(new THREE.Vector3(...R.face), g.spec.H / 1.7);
+    armCands(restCands, { yaw: 0, slide: 0, a: ax, n: nR, e: 0, gap: 0, Q: handQuat(ax, nR), face: faceR, roll: 0, pose: 0 }, 4, true);
+    // The elbow goes to the candidate nearest the set direction (the upper arm hanging by the side).
+    const Er = shR.clone().addScaledVector(new THREE.Vector3(...R.elbow).normalize(), L1);
+    rest = restCands.reduce((m, c) => !m || c.E.distanceTo(Er) < m.E.distanceTo(Er) ? c : m, null);
+    Object.assign(rest, { palmC: rest.P, faceRest: faceR.clone(), pole: new THREE.Vector3(...R.elbow).normalize().multiplyScalar(0.5) });
+  } else {
+    let roll = { e: Infinity };
+    for (let th = -78; th <= 78; th += 6) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
+    for (let th = roll.th - 5; th <= roll.th + 5; th += 1) { const n = nAt(th), e = seatExcess(seat, mid, n, line, T); if (e < roll.e) roll = { th, n, e }; }
+    const n = roll.n;
+    for (let yaw = -WIDE_YAW; yaw <= WIDE_YAW; yaw += 4) {
+      const a = line.clone().applyAxisAngle(n, yaw * DEG);
+      const b = n.clone().cross(a), Q = handQuat(a, n);
+      for (let slide = -WIDE_SLIDE; slide <= WIDE_SLIDE + 1e-6; slide += 0.01) {
+        const c = mid.clone().addScaledVector(a, slide);
+        // Both sites well inside the blade: 3 cm from its ends, 2.5 cm from its sides.
+        const inside = sp => { const d = sp.skin.clone().sub(c); return Math.abs(d.dot(a)) <= T.halfLen - 0.03 && Math.abs(d.dot(b)) <= (T.rod ? T.halfW : T.halfW - 0.025); };
+        if (!inside(sL) || !inside(sR)) continue;
+        const e = seatExcess(seat, c, n, a, T);
+        // How far each site is below the face's plane (0 = touching).
+        const gap = Math.max(e - sL.skin.clone().sub(c).dot(n), e - sR.skin.clone().sub(c).dot(n));
+        const face = c.clone().addScaledVector(n, e - WIDE_DEPTH);
+        armCands(restCands, { yaw, slide, a, n, e, gap, Q, face, roll: roll.th, pose: 4 * gap + 0.0004 * Math.abs(yaw) + 0.1 * Math.abs(slide) });
+      }
     }
-  }
-  const rest = pick(restCands);
+  rest = pick(restCands);
   Object.assign(rest, { palmC: rest.P, faceRest: rest.face.clone().addScaledVector(rest.n, WIDE_DEPTH + REST_GAP) });
+  }
   // Contact: the blade against the sit spots (WIDE_CONTACT), its face WIDE_CONTACT.depth
   // into the higher of the two sites. The glutes above them stand well through its plane;
   // the press flattens them onto the face (see updateScene).
-  const W_ = WIDE_CONTACT, cn = nAt(W_.roll), cb = cn.clone().cross(line);
-  const cc = mid.clone().addScaledVector(line, W_.slide * g.spec.H / 1.7).addScaledVector(cb, -W_.drop * g.spec.H / 1.7);
-  const hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
+  const W_ = scn.wideContact;
+  // The rod lies along the skin where it lands: its face is the sites' mean surface normal (squared to the line between them),
+  // not a set roll, since the surface turns up the height of the glutes.
+  let cn = nAt(W_.roll);
+  if (T.rod && !W_.keepRoll) { cn = sL.n.clone().add(sR.n).normalize(); cn.addScaledVector(line, -cn.dot(line)).normalize(); }
+  const cb = cn.clone().cross(line);
+  const cc = mid.clone().addScaledVector(line, W_.slide * g.spec.H / 1.7).addScaledVector(cb, T.rod ? 0 : -W_.drop * g.spec.H / 1.7);
+  let hi = Math.max(sL.skin.clone().sub(cc).dot(cn), sR.skin.clone().sub(cc).dot(cn));
+  // Standing, the glutes' rear-most skin stands well proud of the low sites: the blade meets that.
+  if (scn.atHead) {
+    const ca0 = line.clone().applyAxisAngle(cn, W_.yaw * DEG), cb0 = cn.clone().cross(ca0);
+    for (let i = 0; i < seat.length; i += 6) {
+      const dx = seat[i] - cc.x, dy = seat[i + 1] - cc.y, dz = seat[i + 2] - cc.z;
+      if (Math.abs(dx * ca0.x + dy * ca0.y + dz * ca0.z) > T.halfLen || Math.abs(dx * cb0.x + dy * cb0.y + dz * cb0.z) > T.halfW) continue;
+      hi = Math.max(hi, dx * cn.x + dy * cn.y + dz * cn.z);
+    }
+  }
   const contactCands = [];
   const ca = line.clone().applyAxisAngle(cn, W_.yaw * DEG);
-  armCands(contactCands, { yaw: W_.yaw, slide: W_.slide, a: ca, n: cn, Q: handQuat(ca, cn), face: cc.addScaledVector(cn, hi - W_.depth), roll: W_.roll, pose: 0 }, 1, true);
+  armCands(contactCands, { yaw: W_.yaw, slide: W_.slide, a: ca, n: cn, Q: handQuat(ca, cn), face: cc.addScaledVector(cn, hi - (T.rod ? ROD_DEPTH : W_.depth)), roll: W_.roll, pose: 0 }, 1, true);
   const Epref = shR.clone().addScaledVector(new THREE.Vector3(...W_.elbow).normalize().applyQuaternion(torsoQ.clone().invert()), L1);
   const fit = contactCands.reduce((m, c) => !m || c.E.distanceTo(Epref) < m.E.distanceTo(Epref) ? c : m, null);
   Object.assign(fit, { p: fit.P, palmC: fit.P, skin: mid, skinL: sL.skin, skinR: sR.skin, tiltDeg: 0, rest, ms: performance.now() - t0 });
@@ -3654,9 +4530,9 @@ function posePatch(ch, idx) {
 function sceneAnchors(s) {
   const spec = s.spec, Y = spec.Y, J = spec.J, H = spec.H;
   const pos = s.mesh.geometry.attributes.position, v = new THREE.Vector3();
-  const toSurface = (bone, origin) => {
+  const toSurface = (bone, origin, dz = -1) => {
     const p = origin.slice();
-    for (let i = 0; i < 400 && field(spec, p) < 0; i++) p[2] -= 0.001;
+    for (let i = 0; i < 400 && field(spec, p) < 0; i++) p[2] += dz * 0.001;
     const n = norm(gradient(spec, p, 0.0015, field(spec, p)));
     // Nearest mesh vertex to the surface point; its skinned position is tracked per frame.
     const sp = new THREE.Vector3(...p);
@@ -3679,10 +4555,26 @@ function sceneAnchors(s) {
     // Resting left hand: mid-back, just below the underbust line (below Aya's top).
     shoulders: toSurface('spine1', [0, Y.under - 0.03 * H, 0]),
     glute: toSurface('pelvis', [0, Y.hip - 0.03 * H, 0]),
+    // Over the case the resting left hand lies on the small of the back.
+    lowback: toSurface('spine1', [0, Y.waist - 0.02 * H, 0]),
+    // Hands on head: the disciplinarian's left hand rests against the navel (front, so marching +Z).
+    navel: toSurface('spine1', [0.0506 * H, Y.waist - 0.007 * H, 0], 1),
+    // ... and the swinging hand rests by the near cheek (the subject's left, as the strike strip's x).
+    cheekL: toSurface('pelvis', [hipA * 0.42, Y.hip - 0.03 * H, 0]),
     // A short strip of candidates per side, from the fold (index 0) up toward the
     // glute; the strike search prefers the lowest one the arm can reach flat.
     foldL: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),
     foldR: [0, 1, 2, 3, 4, 5, 6, 7].map(k => toSurface('pelvis', [-hipA * 0.42, lerp(foldY, Y.hip - 0.035 * H, k / 7), 0])),
+    // The rod's strike strip, from a quarter of the glute's height down the thigh below the fold (index 0) to a quarter
+    // of the way down from its top (last): points on the skin, skinned by the pelvis above the fold and the thigh below it.
+    ...Object.fromEntries(['L', 'R'].map(side => {
+      const sgn = side === 'L' ? 1 : -1, top = Y.hip - 0.035 * H, G = top - foldY, lo = foldY - ROD_REACH * G, hi = top - ROD_REACH * G, N = 12;
+      return ['rod' + side, Array.from({ length: N }, (_, k) => {
+        const y = lerp(lo, hi, k / (N - 1)), below = clamp((foldY - y) / (ROD_REACH * G), 0, 1);
+        const x = sgn * lerp(hipA * 0.42, Math.abs(J['thigh' + side][0]), below);
+        return toSurface(y < foldY ? 'thigh' + side : 'pelvis', [x, y, 0]);
+      })];
+    })),
     kneeL: toSurface('thighL', kneeAt('L')),
     kneeR: toSurface('thighR', kneeAt('R')),
   };
@@ -3751,8 +4643,38 @@ function addMark(ch, side, pointW, weight = 1) {
   m.c = m.c ? m.c.lerp(p, 1 / Math.min(m.n, 8)) : p;   // a running centre, settling as smacks accumulate
   applyMarks(ch);
 }
+// ── Stripes (the rod) ──
+// Each contact leaves a stripe where the bar actually touched: at the height it landed (rest space, through the pelvis, so it
+// stays put as the body moves), across the length of the bar (not the cleft it bridges, nor beyond its ends). Each adds
+// STRIPE_ADD of full colour; where several overlap they add up, and the colour goes from red toward purple as it deepens.
+const STRIPES_FRESH = 6, STRIPE_GONE_PER_SEC = 0.02;   // older stripes keep this share per second
+const STRIPE_ADD = 0.15, STRIPES_MAX = 32, STRIPE_HALF = 0.0035;   // (a stripe is a little under the rod's 10 mm: 7 mm)
+function addStripe(ch, pointW, axisW, halfLen) {
+  const i = BONES.indexOf('pelvis');
+  const inv = ch.bones.pelvis.matrixWorld.clone().multiply(ch.mesh.skeleton.boneInverses[i]).invert();
+  const c = pointW.clone().applyMatrix4(inv);
+  const e1 = pointW.clone().addScaledVector(axisW, halfLen).applyMatrix4(inv), e2 = pointW.clone().addScaledVector(axisW, -halfLen).applyMatrix4(inv);
+  ch.stripes = ch.stripes || [];
+  ch.stripes.push({ y: c.y, x0: Math.min(e1.x, e2.x), x1: Math.max(e1.x, e2.x), a: STRIPE_ADD, a0: STRIPE_ADD });
+  if (ch.stripes.length > STRIPES_MAX) ch.stripes.shift();
+  // Only the latest STRIPES_FRESH keep the marks' slow fading; any older ones go almost at once (see fadeMarks).
+  ch.stripes.forEach((s, k) => { if (k < ch.stripes.length - STRIPES_FRESH) s.old = true; });
+  applyStripes(ch);
+}
+function applyStripes(ch) {
+  const u = ch.mesh.material.userData.uniforms, S = ch.stripes || [];
+  u.uStripeN.value = S.length;
+  S.forEach((s, k) => u.uStripe.value[k].set(s.y, s.a, s.x0, s.x1));
+}
 // Call every frame for every character, on stage or not.
 function fadeMarks(ch, dt) {
+  if (ch.stripes && ch.stripes.length && !ch.marksHeld) {
+    const keep = Math.pow(MARK_KEEP_PER_SEC, dt);
+    const gone = Math.pow(STRIPE_GONE_PER_SEC, dt);
+    for (const s of ch.stripes) s.a = s.old ? s.a * gone : Math.max(s.a * keep, s.a0 * MARK_AFTER_CYCLE);
+    if (ch.stripes.some(s => s.old && s.a < 0.003)) ch.stripes = ch.stripes.filter(s => !(s.old && s.a < 0.003));
+    applyStripes(ch);
+  }
   if (!ch.marks || ch.marksHeld) return;
   const keep = Math.pow(MARK_KEEP_PER_SEC, dt);
   for (const side of ['L', 'R']) {
@@ -3766,15 +4688,17 @@ function fadeMarks(ch, dt) {
 }
 // One dance move performed (see createDancer).
 function fadeMarksMove(ch) {
+  if (ch.stripes && !ch.marksHeld) { for (const s of ch.stripes) s.a *= MARK_FADE_MOVE; ch.stripes = ch.stripes.filter(s => s.a >= 0.005); applyStripes(ch); }
   if (!ch.marks || ch.marksHeld) return;
   for (const side of ['L', 'R']) { const m = ch.marks[side]; m.f *= MARK_FADE_MOVE; if (m.f < 0.005) { m.f = 0; m.n = 0; m.c = null; } }
   if (!ch.marks.L.f && !ch.marks.R.f) ch.marks = null;
   applyMarks(ch);
 }
-function clearMarks(ch) { ch.marks = null; applyMarks(ch); }
+function clearMarks(ch) { ch.marks = null; ch.stripes = null; applyMarks(ch); applyStripes(ch); }
 // Copies one character's marks onto another built from the same person (the viewer's
 // scene uses its own copies of the pair).
 function copyMarks(from, to) {
+  to.stripes = from.stripes ? from.stripes.map(s => ({ ...s })) : null; applyStripes(to);
   to.marks = from.marks ? Object.fromEntries(['L', 'R'].map(s => [s, { ...from.marks[s], c: from.marks[s].c && from.marks[s].c.clone() }])) : null;   // (f, n, t and the centre)
   applyMarks(to);
 }
@@ -3809,6 +4733,27 @@ function setPress(ch, pointW, normalW, radius, amount, slot = '', axisW = null, 
     u.uPressDepth.value = depth;
     if (!axisW) u.uPressAx.value.set(0, 0, 0, 0);
     else { const ax = axisW.clone().transformDirection(inv); u.uPressAx.value.set(ax.x, ax.y, ax.z, halfLen); }
+  }
+}
+
+// Presses `ch`'s skin against the four fingers of `hand`'s `side` hand, at the hand's current
+// curl, `amount` (0–1) in contact. Several hands add up: pass `append` to keep the earlier
+// ones. The fingers are straight capsules on the finger bone, as built (see FINGERS).
+function setFingerCaps(ch, hand, side, amount, append = false) {
+  const u = ch.mesh.material.userData.uniforms, H = hand.spec.H;
+  if (!append) u.uCapN.value = 0;
+  if (amount <= 0) return;
+  const fb = hand.bones['fingers' + side], inv = ch.mesh.matrixWorld.clone().invert();
+  fb.updateMatrixWorld(true);
+  const dir = fb.position.clone().normalize(), across = new THREE.Vector3(0, 0, 1), handLen = 0.106 * H;
+  for (const [off, lenF, rF, back] of FINGERS) {
+    if (u.uCapN.value >= CAPS) return;
+    const r = rF * H * 0.95;
+    const k0 = dir.clone().multiplyScalar(-handLen * back).addScaledVector(across, off * FINGER_PITCH * H);
+    const a = k0.clone().addScaledVector(dir, r), b = k0.clone().addScaledVector(dir, handLen * lenF - r);
+    const i = u.uCapN.value++;
+    u.uCapA.value[i].set(...fb.localToWorld(a).applyMatrix4(inv).toArray(), r);
+    u.uCapB.value[i].set(...fb.localToWorld(b).applyMatrix4(inv).toArray(), amount);
   }
 }
 
@@ -4143,6 +5088,35 @@ function bustSpring(ch, dt) {
 // compresses mostly the belly, a shin hardly at all. Hands are left out: their
 // contacts are placed by IK and flattened by the press slots (setPress).
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// GL diagnostics. Phones' GPUs have far smaller shader limits than desktops' (a few hundred uniform vectors), and a shader
+// that doesn't link just isn't drawn — the skin goes missing with nothing on screen to say why. glReport reads the limits;
+// watchGL(renderer, show) calls show(text) with them and the first shader error three.js logs (or a lost context), and
+// is how the pages put it on screen (always with ?gl in the address).
+// ════════════════════════════════════════════════════════════════
+function glReport(renderer) {
+  const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const P = n => gl.getParameter(n);
+  return {
+    gpu: ext ? P(ext.UNMASKED_RENDERER_WEBGL) : 'unknown', webgl2: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext,
+    vertexUniformVectors: P(gl.MAX_VERTEX_UNIFORM_VECTORS), fragmentUniformVectors: P(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+    vertexTextureUnits: P(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS), varyingVectors: P(gl.MAX_VARYING_VECTORS), floatTextures: !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('OES_texture_float')),
+  };
+}
+function watchGL(renderer, show) {
+  const info = glReport(renderer), line = `GPU ${info.gpu}; WebGL${info.webgl2 ? 2 : 1}; uniform vectors vertex ${info.vertexUniformVectors}, fragment ${info.fragmentUniformVectors}; varyings ${info.varyingVectors}; vertex textures ${info.vertexTextureUnits}`;
+  let shown = false;
+  const say = msg => { if (shown) return; shown = true; show(msg + '\n' + line); };
+  const err = console.error;
+  console.error = function (...a) {
+    err.apply(console, a);
+    const m = a.map(x => String(x)).join(' ');
+    if (/WebGLProgram|shader|uniform|VALIDATE_STATUS|link/i.test(m)) say(m.slice(0, 700));
+  };
+  renderer.domElement.addEventListener('webglcontextlost', () => say('The WebGL context was lost.'));
+  if (/[?&]gl\b/.test(location.search)) { shown = false; say('GL report'); }
+  return info;
+}
 const CONTACT_ELL = 36, CONTACT_CONE = 10, CONTACT_PAD = 0.002, CONTACT_MAX = 0.1;
 function buildProxies(spec) {
   const H = spec.H, loft = spec.prims[0], ells = [], cones = [];
@@ -4176,34 +5150,46 @@ function updateContacts(everyone) {
     const sk = partner.mesh.skeleton, M = {}, m3 = new THREE.Matrix3();
     const mat = b => M[b] || (M[b] = partner.bones[b].matrixWorld.clone().multiply(sk.boneInverses[BONES.indexOf(b)]));
     const V3 = a => new THREE.Vector3(...a);
+    const D = u.uContactTex.value.image.data;
     partner.proxies.ells.forEach((e, i) => {
       const m = mat(e.bone); m3.setFromMatrix4(m);
       const c = V3(e.c).applyMatrix4(m), ax = [e.u, e.v, e.w].map(a => V3(a).applyMatrix3(m3).normalize());
-      for (let k = 0; k < 3; k++) u.uCE.value[i * 4 + k].set(ax[k].x, ax[k].y, ax[k].z, -ax[k].dot(c));
-      u.uCE.value[i * 4 + 3].set(e.r[0], e.r[1], e.r[2], e.soft);
+      const o = i * 16;
+      for (let k = 0; k < 3; k++) { D[o + k * 4] = ax[k].x; D[o + k * 4 + 1] = ax[k].y; D[o + k * 4 + 2] = ax[k].z; D[o + k * 4 + 3] = -ax[k].dot(c); }
+      D[o + 12] = e.r[0]; D[o + 13] = e.r[1]; D[o + 14] = e.r[2]; D[o + 15] = e.soft;
     });
     partner.proxies.cones.forEach((q, i) => {
       const m = mat(q.bone), a = V3(q.a).applyMatrix4(m), b = V3(q.b).applyMatrix4(m);
-      u.uCC.value[i * 2].set(a.x, a.y, a.z, q.r1); u.uCC.value[i * 2 + 1].set(b.x, b.y, b.z, q.r2);
-      u.uCSoft.value[i] = q.soft;
+      const o = (CONTACT_ELL + i) * 16;
+      D[o] = a.x; D[o + 1] = a.y; D[o + 2] = a.z; D[o + 3] = q.r1; D[o + 4] = b.x; D[o + 5] = b.y; D[o + 6] = b.z; D[o + 7] = q.r2; D[o + 8] = q.soft;
     });
+    u.uContactTex.value.needsUpdate = true;
     u.uContactN.value.set(partner.proxies.ells.length, partner.proxies.cones.length);
   }
 }
+// The partner's proxies travel in a small float texture (4 texels wide, a row per proxy) rather than as uniform arrays, which
+// ran past phones' limits on vertex uniforms. An ellipsoid: three axis texels (axis, offset) and the radii and softness;
+// a cone, from row CONTACT_ELL: its two ends (point, radius) and its softness.
+function contactTexture() {
+  const t = new THREE.DataTexture(new Float32Array(4 * (CONTACT_ELL + CONTACT_CONE) * 4), 4, CONTACT_ELL + CONTACT_CONE, THREE.RGBAFormat, THREE.FloatType);
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
 const CONTACT_GLSL = `
-  uniform vec4 uCE[${CONTACT_ELL * 4}];
-  uniform vec4 uCC[${CONTACT_CONE * 2}];
-  uniform float uCSoft[${CONTACT_CONE}];
+  uniform sampler2D uContactTex;
   uniform vec2 uContactN;
   attribute float soft;
+  vec4 cT(int x, int row) { return texture2D(uContactTex, vec2((float(x) + 0.5) / 4.0, (float(row) + 0.5) / ${CONTACT_ELL + CONTACT_CONE}.0)); }
   float cEll(int i, vec3 p) {
-    vec3 q = vec3(dot(uCE[i*4].xyz, p) + uCE[i*4].w, dot(uCE[i*4+1].xyz, p) + uCE[i*4+1].w, dot(uCE[i*4+2].xyz, p) + uCE[i*4+2].w);
-    vec3 r = uCE[i*4+3].xyz;
+    vec4 a0 = cT(0, i), a1 = cT(1, i), a2 = cT(2, i);
+    vec3 q = vec3(dot(a0.xyz, p) + a0.w, dot(a1.xyz, p) + a1.w, dot(a2.xyz, p) + a2.w);
+    vec3 r = cT(3, i).xyz;
     float k0 = length(q / r), k1 = length(q / (r * r));
     return k1 < 1e-7 ? -min(r.x, min(r.y, r.z)) : k0 * (k0 - 1.0) / k1;
   }
   float cCone(int i, vec3 p) {                        // iq's round cone
-    vec3 a = uCC[i*2].xyz, b = uCC[i*2+1].xyz; float r1 = uCC[i*2].w, r2 = uCC[i*2+1].w;
+    vec4 ta = cT(0, ${CONTACT_ELL} + i), tb = cT(1, ${CONTACT_ELL} + i);
+    vec3 a = ta.xyz, b = tb.xyz; float r1 = ta.w, r2 = tb.w;
     vec3 ba = b - a; float l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1.0 / l2;
     vec3 pa = p - a; float y = dot(pa, ba), z = y - l2;
     vec3 xv = pa * l2 - ba * y; float x2 = dot(xv, xv), y2 = y * y * l2, z2 = z * z * l2;
@@ -4218,8 +5204,8 @@ const CONTACT_VERTEX = `
   if (uContactN.x + uContactN.y > 0.0) {
     vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
     float dBest = 1e9, sBest = 1.0; int kBest = 0, iBest = 0;
-    for (int i = 0; i < ${CONTACT_ELL}; i++) { if (float(i) >= uContactN.x) break; float d = cEll(i, wp); if (d < dBest) { dBest = d; kBest = 0; iBest = i; sBest = uCE[i*4+3].w; } }
-    for (int i = 0; i < ${CONTACT_CONE}; i++) { if (float(i) >= uContactN.y) break; float d = cCone(i, wp); if (d < dBest) { dBest = d; kBest = 1; iBest = i; sBest = uCSoft[i]; } }
+    for (int i = 0; i < ${CONTACT_ELL}; i++) { if (float(i) >= uContactN.x) break; float d = cEll(i, wp); if (d < dBest) { dBest = d; kBest = 0; iBest = i; sBest = cT(3, i).w; } }
+    for (int i = 0; i < ${CONTACT_CONE}; i++) { if (float(i) >= uContactN.y) break; float d = cCone(i, wp); if (d < dBest) { dBest = d; kBest = 1; iBest = i; sBest = cT(2, ${CONTACT_ELL} + i).x; } }
     if (dBest < ${CONTACT_PAD}) {
       const float e = 0.002;
       vec3 g = vec3(cProxy(kBest, iBest, wp + vec3(e, 0, 0)) - cProxy(kBest, iBest, wp - vec3(e, 0, 0)),
@@ -4911,10 +5897,10 @@ function bustContact(ch, everyone) {
 
 global.Starlight = {
   PRESETS, ORDER, FACE_DEFAULTS, faceParams, BONES, POSES, clone, SKIN, BRA_STYLES, lookLayers, dress, setSkin,
-  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
+  buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, setMoods, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createDisciplineScene, IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createPain, PAIN, clothCushion, FACE, glReport, watchGL, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
