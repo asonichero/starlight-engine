@@ -1446,16 +1446,14 @@ function makeBodyMaterial(m) {
     // clears the finger, so a pad dents the flesh the way the palm plane does.
     uCapA: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapB: { value: Array.from({ length: CAPS }, () => new THREE.Vector4()) }, uCapN: { value: 0 },
     // Contact: the partner's posed proxies (see CONTACT; set by updateContacts).
-    uCE: { value: Array.from({ length: CONTACT_ELL * 4 }, () => new THREE.Vector4()) },
-    uCC: { value: Array.from({ length: CONTACT_CONE * 2 }, () => new THREE.Vector4()) },
-    uCSoft: { value: new Array(CONTACT_CONE).fill(0) },
+    uContactTex: { value: contactTexture() },
     uContactN: { value: new THREE.Vector2() },
     // Marks (see addMark): per side, centre in rest space, strength and radius.
     uMarkP: { value: [new THREE.Vector3(), new THREE.Vector3()] }, uMarkAmt: { value: [0, 0] },
     uMarkReach: { value: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 1, 1)] },
     uMarkRegion: { value: new THREE.Vector4() }, uMarkCol: { value: lin(MARK_COLOR) },
     // Stripes (the rod; see addStripe): rest-space heights and their strength.
-    uStripeY: { value: new Array(32).fill(0) }, uStripeA: { value: new Array(32).fill(0) }, uStripeX0: { value: new Array(32).fill(0) }, uStripeX1: { value: new Array(32).fill(0) }, uStripeN: { value: 0 },
+    uStripe: { value: Array.from({ length: 32 }, () => new THREE.Vector4()) }, uStripeN: { value: 0 },
     // Lip colour: the skin warmed toward a rose, less on male builds (or preset lipColor).
     uLipCol: { value: m.lipColor != null ? lin(m.lipColor) : skin.clone().lerp(lin(0xa84a52), m.build === 'male' ? 0.22 : 0.62) },
     // The painted lips' shape in rest space (spec.mouth, set in buildCharacter):
@@ -1523,7 +1521,7 @@ function makeBodyMaterial(m) {
           transformed -= objectNormal * dent * wC;
         }` + CONTACT_VERTEX);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest, vRestN;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform float uStripeY[32], uStripeA[32], uStripeX0[32], uStripeX1[32], uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vLayerA, vLayerB;\nvarying float vHair, vCrease;\nuniform vec3 uLipCol;\nuniform vec4 uMouth;\nuniform float uMouthZ;\nuniform vec2 uMouthCorner;\nuniform vec3 uMouthOpen;\nvarying vec3 vRest, vRestN;\nuniform vec3 uSkin, uHair, uLayer[${MAX_LAYERS}], uMarkP[2], uMarkReach[2], uMarkCol;\nuniform float uMarkAmt[2];\nuniform vec4 uStripe[32];\nuniform float uStripeN;\nuniform vec4 uMarkRegion;\nuniform float uWeights;`)
       .replace('#include <color_fragment>', `
         // Each layer's edge distance, thresholded over about a pixel; innermost first.
         vec4 wa = fwidth(vLayerA) * 0.75 + 1e-5, wb = fwidth(vLayerB) * 0.75 + 1e-5;
@@ -1562,9 +1560,10 @@ function makeBodyMaterial(m) {
           rear *= smoothstep(0.6, 0.8, -vRestN.z);
           for (int si = 0; si < 32; si++) {
             if (float(si) >= uStripeN) break;
-            float dy = abs(vRest.y - uStripeY[si]);
-            float inx = smoothstep(uStripeX0[si] - 0.004, uStripeX0[si] + 0.006, vRest.x) * (1.0 - smoothstep(uStripeX1[si] - 0.006, uStripeX1[si] + 0.004, vRest.x));
-            sadd += uStripeA[si] * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
+            vec4 st = uStripe[si];   // y, strength, x0, x1
+            float dy = abs(vRest.y - st.x);
+            float inx = smoothstep(st.z - 0.004, st.z + 0.006, vRest.x) * (1.0 - smoothstep(st.w - 0.006, st.w + 0.004, vRest.x));
+            sadd += st.y * inx * (1.0 - smoothstep(${STRIPE_HALF * 0.6}, ${STRIPE_HALF * 1.4}, dy));
           }
           sadd *= rear * cleft;
           // Added on top of whatever marks are already there (a more localised deepening of the same colour), and the red deepens
@@ -4656,7 +4655,7 @@ function addStripe(ch, pointW, axisW, halfLen) {
 function applyStripes(ch) {
   const u = ch.mesh.material.userData.uniforms, S = ch.stripes || [];
   u.uStripeN.value = S.length;
-  S.forEach((s, k) => { u.uStripeY.value[k] = s.y; u.uStripeA.value[k] = s.a; u.uStripeX0.value[k] = s.x0; u.uStripeX1.value[k] = s.x1; });
+  S.forEach((s, k) => u.uStripe.value[k].set(s.y, s.a, s.x0, s.x1));
 }
 // Call every frame for every character, on stage or not.
 function fadeMarks(ch, dt) {
@@ -5080,6 +5079,35 @@ function bustSpring(ch, dt) {
 // compresses mostly the belly, a shin hardly at all. Hands are left out: their
 // contacts are placed by IK and flattened by the press slots (setPress).
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// GL diagnostics. Phones' GPUs have far smaller shader limits than desktops' (a few hundred uniform vectors), and a shader
+// that doesn't link just isn't drawn — the skin goes missing with nothing on screen to say why. glReport reads the limits;
+// watchGL(renderer, show) calls show(text) with them and the first shader error three.js logs (or a lost context), and
+// is how the pages put it on screen (always with ?gl in the address).
+// ════════════════════════════════════════════════════════════════
+function glReport(renderer) {
+  const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const P = n => gl.getParameter(n);
+  return {
+    gpu: ext ? P(ext.UNMASKED_RENDERER_WEBGL) : 'unknown', webgl2: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext,
+    vertexUniformVectors: P(gl.MAX_VERTEX_UNIFORM_VECTORS), fragmentUniformVectors: P(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+    vertexTextureUnits: P(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS), varyingVectors: P(gl.MAX_VARYING_VECTORS), floatTextures: !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('OES_texture_float')),
+  };
+}
+function watchGL(renderer, show) {
+  const info = glReport(renderer), line = `GPU ${info.gpu}; WebGL${info.webgl2 ? 2 : 1}; uniform vectors vertex ${info.vertexUniformVectors}, fragment ${info.fragmentUniformVectors}; varyings ${info.varyingVectors}; vertex textures ${info.vertexTextureUnits}`;
+  let shown = false;
+  const say = msg => { if (shown) return; shown = true; show(msg + '\n' + line); };
+  const err = console.error;
+  console.error = function (...a) {
+    err.apply(console, a);
+    const m = a.map(x => String(x)).join(' ');
+    if (/WebGLProgram|shader|uniform|VALIDATE_STATUS|link/i.test(m)) say(m.slice(0, 700));
+  };
+  renderer.domElement.addEventListener('webglcontextlost', () => say('The WebGL context was lost.'));
+  if (/[?&]gl\b/.test(location.search)) { shown = false; say('GL report'); }
+  return info;
+}
 const CONTACT_ELL = 36, CONTACT_CONE = 10, CONTACT_PAD = 0.002, CONTACT_MAX = 0.1;
 function buildProxies(spec) {
   const H = spec.H, loft = spec.prims[0], ells = [], cones = [];
@@ -5113,34 +5141,46 @@ function updateContacts(everyone) {
     const sk = partner.mesh.skeleton, M = {}, m3 = new THREE.Matrix3();
     const mat = b => M[b] || (M[b] = partner.bones[b].matrixWorld.clone().multiply(sk.boneInverses[BONES.indexOf(b)]));
     const V3 = a => new THREE.Vector3(...a);
+    const D = u.uContactTex.value.image.data;
     partner.proxies.ells.forEach((e, i) => {
       const m = mat(e.bone); m3.setFromMatrix4(m);
       const c = V3(e.c).applyMatrix4(m), ax = [e.u, e.v, e.w].map(a => V3(a).applyMatrix3(m3).normalize());
-      for (let k = 0; k < 3; k++) u.uCE.value[i * 4 + k].set(ax[k].x, ax[k].y, ax[k].z, -ax[k].dot(c));
-      u.uCE.value[i * 4 + 3].set(e.r[0], e.r[1], e.r[2], e.soft);
+      const o = i * 16;
+      for (let k = 0; k < 3; k++) { D[o + k * 4] = ax[k].x; D[o + k * 4 + 1] = ax[k].y; D[o + k * 4 + 2] = ax[k].z; D[o + k * 4 + 3] = -ax[k].dot(c); }
+      D[o + 12] = e.r[0]; D[o + 13] = e.r[1]; D[o + 14] = e.r[2]; D[o + 15] = e.soft;
     });
     partner.proxies.cones.forEach((q, i) => {
       const m = mat(q.bone), a = V3(q.a).applyMatrix4(m), b = V3(q.b).applyMatrix4(m);
-      u.uCC.value[i * 2].set(a.x, a.y, a.z, q.r1); u.uCC.value[i * 2 + 1].set(b.x, b.y, b.z, q.r2);
-      u.uCSoft.value[i] = q.soft;
+      const o = (CONTACT_ELL + i) * 16;
+      D[o] = a.x; D[o + 1] = a.y; D[o + 2] = a.z; D[o + 3] = q.r1; D[o + 4] = b.x; D[o + 5] = b.y; D[o + 6] = b.z; D[o + 7] = q.r2; D[o + 8] = q.soft;
     });
+    u.uContactTex.value.needsUpdate = true;
     u.uContactN.value.set(partner.proxies.ells.length, partner.proxies.cones.length);
   }
 }
+// The partner's proxies travel in a small float texture (4 texels wide, a row per proxy) rather than as uniform arrays, which
+// ran past phones' limits on vertex uniforms. An ellipsoid: three axis texels (axis, offset) and the radii and softness;
+// a cone, from row CONTACT_ELL: its two ends (point, radius) and its softness.
+function contactTexture() {
+  const t = new THREE.DataTexture(new Float32Array(4 * (CONTACT_ELL + CONTACT_CONE) * 4), 4, CONTACT_ELL + CONTACT_CONE, THREE.RGBAFormat, THREE.FloatType);
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
 const CONTACT_GLSL = `
-  uniform vec4 uCE[${CONTACT_ELL * 4}];
-  uniform vec4 uCC[${CONTACT_CONE * 2}];
-  uniform float uCSoft[${CONTACT_CONE}];
+  uniform sampler2D uContactTex;
   uniform vec2 uContactN;
   attribute float soft;
+  vec4 cT(int x, int row) { return texture2D(uContactTex, vec2((float(x) + 0.5) / 4.0, (float(row) + 0.5) / ${CONTACT_ELL + CONTACT_CONE}.0)); }
   float cEll(int i, vec3 p) {
-    vec3 q = vec3(dot(uCE[i*4].xyz, p) + uCE[i*4].w, dot(uCE[i*4+1].xyz, p) + uCE[i*4+1].w, dot(uCE[i*4+2].xyz, p) + uCE[i*4+2].w);
-    vec3 r = uCE[i*4+3].xyz;
+    vec4 a0 = cT(0, i), a1 = cT(1, i), a2 = cT(2, i);
+    vec3 q = vec3(dot(a0.xyz, p) + a0.w, dot(a1.xyz, p) + a1.w, dot(a2.xyz, p) + a2.w);
+    vec3 r = cT(3, i).xyz;
     float k0 = length(q / r), k1 = length(q / (r * r));
     return k1 < 1e-7 ? -min(r.x, min(r.y, r.z)) : k0 * (k0 - 1.0) / k1;
   }
   float cCone(int i, vec3 p) {                        // iq's round cone
-    vec3 a = uCC[i*2].xyz, b = uCC[i*2+1].xyz; float r1 = uCC[i*2].w, r2 = uCC[i*2+1].w;
+    vec4 ta = cT(0, ${CONTACT_ELL} + i), tb = cT(1, ${CONTACT_ELL} + i);
+    vec3 a = ta.xyz, b = tb.xyz; float r1 = ta.w, r2 = tb.w;
     vec3 ba = b - a; float l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1.0 / l2;
     vec3 pa = p - a; float y = dot(pa, ba), z = y - l2;
     vec3 xv = pa * l2 - ba * y; float x2 = dot(xv, xv), y2 = y * y * l2, z2 = z * z * l2;
@@ -5155,8 +5195,8 @@ const CONTACT_VERTEX = `
   if (uContactN.x + uContactN.y > 0.0) {
     vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
     float dBest = 1e9, sBest = 1.0; int kBest = 0, iBest = 0;
-    for (int i = 0; i < ${CONTACT_ELL}; i++) { if (float(i) >= uContactN.x) break; float d = cEll(i, wp); if (d < dBest) { dBest = d; kBest = 0; iBest = i; sBest = uCE[i*4+3].w; } }
-    for (int i = 0; i < ${CONTACT_CONE}; i++) { if (float(i) >= uContactN.y) break; float d = cCone(i, wp); if (d < dBest) { dBest = d; kBest = 1; iBest = i; sBest = uCSoft[i]; } }
+    for (int i = 0; i < ${CONTACT_ELL}; i++) { if (float(i) >= uContactN.x) break; float d = cEll(i, wp); if (d < dBest) { dBest = d; kBest = 0; iBest = i; sBest = cT(3, i).w; } }
+    for (int i = 0; i < ${CONTACT_CONE}; i++) { if (float(i) >= uContactN.y) break; float d = cCone(i, wp); if (d < dBest) { dBest = d; kBest = 1; iBest = i; sBest = cT(2, ${CONTACT_ELL} + i).x; } }
     if (dBest < ${CONTACT_PAD}) {
       const float e = 0.002;
       vec3 g = vec3(cProxy(kBest, iBest, wp + vec3(e, 0, 0)) - cProxy(kBest, iBest, wp - vec3(e, 0, 0)),
@@ -5851,7 +5891,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, setMoods, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createPain, PAIN, clothCushion, FACE, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createPain, PAIN, clothCushion, FACE, glReport, watchGL, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,

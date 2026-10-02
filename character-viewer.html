@@ -193,6 +193,9 @@ ORDER.forEach(k => current[k] = clone(PRESETS[k]));
 const lin = S.lin;
 const viewEl = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// A phone's GPU can refuse a shader and the skin just doesn't draw: say why on screen (also shown with ?gl in the address).
+(() => { const b = document.createElement('div'); b.id = 'glbanner'; b.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:50;background:#5a1f1f;color:#ffd9d9;font:12px/1.4 monospace;padding:8px 10px;border-radius:6px;white-space:pre-wrap;display:none;max-height:40vh;overflow:auto'; b.onclick = () => b.style.display = 'none'; document.body.appendChild(b);
+  S.watchGL(renderer, msg => { b.textContent = msg; b.style.display = 'block'; }); })();
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(viewEl.clientWidth, viewEl.clientHeight);
 renderer.shadowMap.enabled = true;
