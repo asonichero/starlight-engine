@@ -2358,7 +2358,9 @@ function clothCushion(ch) {
 // and from the implement (a base weight, and how much of it is a sharp sting that fades fast against a deep ache that lingers),
 // and from how tender the skin already is (the marks), and from what they're wearing: clothing over the struck area cushions the
 // sting only (clothCushion / PAIN.CUSHION); the ache is the same through any layers. Distress is the pain now against the capacity; its bands drive the
-// reaction and the face, and past 1 they're at their limit.
+// reaction and the face. At 1 they're at the EDGE OF RESISTANCE (what was the limit): past it they can go on receiving half again
+// (to 1.5), and that is where they're most receptive to the lesson being imparted; at 1.5 it tips into too harsh, under any
+// circumstance, and the correction stops (the scene won't start another stroke).
 // ════════════════════════════════════════════════════════════════
 const PAIN = {
   // base: pain of a full-strength smack at standard speed; sting: the share that is sharp (fades fast).
@@ -2372,14 +2374,20 @@ const PAIN = {
   // What clothing takes off the sting (the sharp part; the deep ache goes through cloth untouched): by garment, stacking.
   CUSHION: { thong: 0.03, briefs: 0.12, trunks: 0.15, leggings: 0.25, shorts: 0.35, trousers: 0.4, skirt: 0.2 }, CUSHION_MAX: 0.7,
   CAP: 70,                               // the capacity at tolerance 0.5 is CAP × (0.7 + 0.6 × tolerance)
-  BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [Infinity, 'at their limit']],
+  EDGE: 1, TOO_HARSH: 1.5,   // distress at the edge of resistance, and half again past it, where it's too harsh
+  BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [1, 'close to the edge of resistance'], [1.5, 'past the edge of resistance: most receptive'], [Infinity, 'too harsh']],
 };
 function createPain(stats = {}) {
   const st = { tolerance: 0.5, resilience: 0.5, ...stats };
-  const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atLimit: false, peak: 0 };
+  const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atEdge: false, atLimit: false, tooHarsh: false, peak: 0 };
   P.capacity = () => PAIN.CAP * (0.7 + 0.6 * st.tolerance);
   P.level = () => P.sting + P.ache;
   P.distress = () => P.level() / P.capacity();
+  // How receptive they are to the lesson: little while composed, building as they struggle, fullest from the edge of resistance
+  // to half again past it, and gone once it's too harsh.
+  P.receptivity = () => { const d = P.distress(), t = Math.max(0, Math.min(1, (d - 0.5) / 0.5)), r = 0.15 + 0.85 * t * t * (3 - 2 * t); return d < PAIN.TOO_HARSH ? r : 0; };
+  P.inEdge = () => { const d = P.distress(); return d >= PAIN.EDGE && d < PAIN.TOO_HARSH; };
+  const mark = () => { const d = P.distress(); if (d >= PAIN.EDGE) P.atEdge = P.atLimit = true; if (d >= PAIN.TOO_HARSH) P.tooHarsh = true; };
   P.band = () => PAIN.BANDS.find(([max]) => P.distress() < max)[1];
   // A smack lands. info: { implement, strength (0–1), speed (1 = standard), raised (seconds the arm waited raised), tender (0–1) }.
   // Returns { pain, reaction }: this smack's pain, and how hard the subject reacts (0–1) given it and how they already are.
@@ -2395,7 +2403,7 @@ function createPain(stats = {}) {
     P.sting += sting; P.ache += ache;
     P.hits++; P.dwell = 0; P.last = { sting, ache, p: eff, cushion };
     P.peak = Math.max(P.peak, P.distress());
-    if (P.distress() >= 1) P.atLimit = true;
+    mark();
     // The reaction: how big this smack is against what they can take, how worked up they already are, and how long they waited for it.
     const reaction = Math.max(0, Math.min(1, 0.2 + 0.8 * (0.5 * eff / (0.3 * P.capacity()) + 0.35 * Math.min(1, P.distress()) + 0.15 * (antic / PAIN.ANTIC_MAX))));
     return { pain: eff, reaction, cushion };
@@ -2408,9 +2416,9 @@ function createPain(stats = {}) {
     }
     const k = 0.5 + st.resilience;   // the fade rate: resilient people recover faster
     P.sting *= Math.exp(-dt * k / PAIN.TAU_STING); P.ache *= Math.exp(-dt * k / PAIN.TAU_ACHE);
-    if (P.distress() >= 1) P.atLimit = true;
+    mark();
   };
-  P.reset = () => { P.sting = P.ache = 0; P.hits = 0; P.last = null; P.dwell = 0; P.atLimit = false; P.peak = 0; };
+  P.reset = () => { P.sting = P.ache = 0; P.hits = 0; P.last = null; P.dwell = 0; P.atEdge = P.atLimit = P.tooHarsh = false; P.peak = 0; };
   return P;
 }
 
@@ -3053,8 +3061,9 @@ function createDisciplineScene(parent, g, s, opts = {}) {
   // One full smack from wherever the arm is: lift, then strike the next contact site
   // (alternating from the second), and hold there until the next call.
   // `hold` keeps the arm raised that long before the strike.
+  // (Past too harsh no further stroke starts, under any circumstance.)
   scn.cycle = (strength = 1, lift = scn.timing.lift / scn.timing.speed, strike = scn.timing.strike / scn.timing.speed, hold = 0) =>
-    scn.raise(lift, () => hold > 0 ? moveTo(1, hold, easeInOut, () => scn.strike(strength, strike)) : scn.strike(strength, strike));
+    scn.pain && scn.pain.tooHarsh ? null : scn.raise(lift, () => hold > 0 ? moveTo(1, hold, easeInOut, () => scn.strike(strength, strike)) : scn.strike(strength, strike));
   // True while the arm is still travelling (a cycle hasn't landed yet).
   scn.busy = () => !!(scn.dv && scn.dv.onArrive);
   // A smack lands: with a pain model (opts.pain) the subject's reaction comes from it (the implement, strength, how fast the
@@ -3135,12 +3144,12 @@ function createDisciplineScene(parent, g, s, opts = {}) {
 //     (as sharp as the sting that got through the clothing), a breath out after. Tolerance masks it (a stoic face holds
 //     until they're near their limit), a low tolerance shows early; `expressive` on a preset scales it.
 //   the disciplinarian — their severity: calm (light) → focused (medium) → stern (firm, severe), with effort on the swing,
-//     and an easing of the face when the subject is near their limit. `scn.severity` (0–1) sets it, otherwise it follows
+//     and an easing of the face as the subject nears too harsh. `scn.severity` (0–1) sets it, otherwise it follows
 //     the strikes' strength and speed. `expressive` scales it per character.
 // Glances (relative animation, the anchored poses stay put): the eyes, and a little of the head and neck, turn to the
 // other's face and back — the subject peeks back as the arm waits and after a smack, the disciplinarian checks the
 // subject's face as the arm rises and reads their reaction after a landing (longer for firmer correction) and keeps looking
-// when they're near their limit. The subject's head also tosses a little on contact.
+// as the subject nears too harsh. The subject's head also tosses a little on contact.
 // ════════════════════════════════════════════════════════════════
 const FACE = {
   HEAT_TAU: 8, WINCE_TAU: 1.1,
@@ -3182,9 +3191,9 @@ function faceState(scn, dt) {
   }
   f.ps = swing;
   const striking = swing > 1.05 && swing < 1.95 && swing >= prev - 1e-6;
-  const ease = P ? Math.max(ss(0.7, 1.0, d), P.atLimit ? 1 : 0) : 0;
+  const ease = P ? Math.max(ss(1.1, PAIN.TOO_HARSH, d), P.tooHarsh ? 1 : 0) : 0;
   let gT = glanceW(f.gG); if (swing > 1.05 && swing < 1.95) gT = 0; gT = Math.max(gT, 0.85 * ease);
-  let sT = glanceW(f.sG) * (1 - ss(0.75, 1.0, L));   // near their limit, eyes shut: no peeking
+  let sT = glanceW(f.sG) * (1 - ss(0.75, 1.0, L));   // at the edge, eyes shut: no peeking
   f.gGw += (gT - f.gGw) * (1 - Math.exp(-dt * 7)); f.sGw += (sT - f.sGw) * (1 - Math.exp(-dt * 7));
 
   // Subject moods.

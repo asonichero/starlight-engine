@@ -25,7 +25,7 @@
   .row2 label { display: flex; justify-content: space-between; color: #c9c9d1; font-size: 12px; margin-bottom: 1px; }
   .row2 label span:last-child { color: #c9a84c; font-variant-numeric: tabular-nums; }
   .row2 input[type=range] { width: 100%; }
-  #meter { height: 10px; background: #26262f; border-radius: 5px; overflow: hidden; margin-top: 4px; }
+  #meter { height: 10px; background: linear-gradient(90deg, #26262f 66.6%, #342c40 66.6%); position: relative; border-radius: 5px; overflow: hidden; margin-top: 4px; }
   #meter > div { height: 100%; width: 0; background: #6b9e5a; transition: width 0.15s, background 0.3s; }
   #band { font-size: 12px; color: #c9c9d1; margin-top: 3px; }
   #status { color: #8a8a96; font-size: 11px; margin-top: 8px; min-height: 2.6em; }
@@ -49,11 +49,11 @@
   <div class="row2"><label><span>Hold before the swing</span><span id="v-hold"></span></label><input type="range" id="s-hold" min="0" max="3" step="0.05"></div>
   <div class="row2"><label><span>Hold after contact</span><span id="v-dwell"></span></label><input type="range" id="s-dwell" min="0" max="3" step="0.05"></div>
   <div class="row2"><label><span>Smacks</span><span id="v-count"></span></label><input type="range" id="s-count" min="1" max="400" step="1"></div>
-  <h3>Subject's limits</h3>
+  <h3>Subject's edge of resistance</h3>
   <div class="row2"><label><span>Tolerance</span><span id="v-tol"></span></label><input type="range" id="s-tol" min="0.05" max="1" step="0.01"></div>
   <div class="row2"><label><span>Resilience</span><span id="v-res"></span></label><input type="range" id="s-res" min="0.05" max="1" step="0.01"></div>
-  <div id="meter"><div></div></div><div id="band"></div>
-  <div class="tabs" style="margin-top:6px"><button id="stoplimit" class="on">Stop at their limit</button><button id="resetpain">Rest</button></div>
+  <div id="meter"><div></div><i style="position:absolute;left:66.6%;top:0;bottom:0;width:2px;background:#e8e0f0"></i></div><div id="band"></div>
+  <div class="tabs" style="margin-top:6px"><button id="stoplimit">Stop at the edge of resistance</button><button id="resetpain">Rest</button></div>
   <h3>Clothing</h3>
   <div class="tabs"><button id="c-bottoms">Bottoms down</button><button id="c-briefs">Briefs down</button></div>
   <h3>Session</h3>
@@ -90,7 +90,7 @@ const CAMERA = {
   knees:  { pos: [-2.8, 1.4, -3.0], target: [-0.05, 0.8, -0.2] },
   spread: { pos: [-3.0, 1.45, -3.4], target: [-0.1, 0.85, -0.45] },
 };
-const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true, stopAtLimit: true };
+const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true, stopAtLimit: false };
 // The strike settings (start from the severity, then follow the sliders) and each character's own limits (start from their preset).
 const strike = { speed: 1, hold: 0.3, dwell: 0.6, count: 12 };
 const stats = {}; ORDER.forEach(k => stats[k] = { tolerance: PRESETS[k].tolerance, resilience: PRESETS[k].resilience });
@@ -206,7 +206,7 @@ function updateStatus() {
   const v = SEVERITY[sel.severity];
   document.getElementById('status').textContent = running
     ? `${done} of ${total} smacks — ${v.name.toLowerCase()}.`
-    : done ? (scn && scn.pain && scn.pain.atLimit && sel.stopAtLimit ? `Stopped after ${done}: they reached their limit.` : `Finished: ${done} smacks.`) : 'Ready.';
+    : done ? (scn && scn.pain && scn.pain.tooHarsh ? `Stopped after ${done}: it tipped into too harsh.` : scn && scn.pain && scn.pain.atEdge && sel.stopAtLimit ? `Stopped after ${done}: they reached the edge of resistance.` : `Finished: ${done} smacks.`) : 'Ready.';
 }
 
 // ── Choosers ─────────────────────────────────────────────
@@ -262,7 +262,7 @@ function frame() {
       since += dt;
       const v = SEVERITY[sel.severity];
       if (!scn.busy() && since > strike.dwell) {
-        if (done >= total || (sel.stopAtLimit && scn.pain && scn.pain.atLimit)) stopRun();
+        if (done >= total || (scn.pain && (scn.pain.tooHarsh || (sel.stopAtLimit && scn.pain.atEdge)))) stopRun();
         else { scn.cycle(v.strength, undefined, undefined, strike.hold); since = 0; }
       }
     }
@@ -280,8 +280,8 @@ function frame() {
     for (const ch of on) S.bunchStep(ch);
     if (scn.pain) {
       const d = scn.pain.distress(), m = document.querySelector('#meter > div');
-      m.style.width = Math.min(100, d * 100) + '%';
-      m.style.background = d < 0.3 ? '#6b9e5a' : d < 0.6 ? '#b4a24a' : d < 0.9 ? '#c8803c' : '#c24a3a';
+      m.style.width = Math.min(100, d / 1.5 * 100) + '%';   // the bar runs to too harsh (1.5); the edge of resistance is the tick at two thirds
+      m.style.background = d < 0.3 ? '#6b9e5a' : d < 0.6 ? '#b4a24a' : d < 0.9 ? '#c8803c' : d < 1 ? '#c24a3a' : d < 1.5 ? '#b08ad0' : '#7a1f1f';
       document.getElementById('band').textContent = `${pair.s.spec.m.name}: ${scn.pain.band()}`;
     }
   }
