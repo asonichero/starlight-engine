@@ -2296,6 +2296,20 @@ function handsOnHead(ch) {
 // The scene is laid out at the world origin (the IK uses world axes).
 // ════════════════════════════════════════════════════════════════
 
+// What the subject is wearing over the struck area, as a share of the sting taken off (PAIN.CUSHION; garments stack, with a ceiling).
+// Lowered garments and a skirt taken off for the correction don't count.
+function clothCushion(ch) {
+  let left = 1;
+  for (const L of ch.layers || []) {
+    if (ch.lowered && ch.lowered.has(L)) continue;
+    let c = 0;
+    if (L.kind === 'bottom') c = L.lowerTo === 'ankle' ? PAIN.CUSHION.trousers : L.legLen >= 1 ? PAIN.CUSHION.leggings : PAIN.CUSHION.shorts;
+    else if (L.kind === 'briefs') c = L.thong || L.back === 'thong' ? PAIN.CUSHION.thong : L.leg ? PAIN.CUSHION.trunks : PAIN.CUSHION.briefs;
+    else if (L.kind === 'skirt') c = ch.skirt && ch.skirt.off ? 0 : PAIN.CUSHION.skirt;
+    left *= 1 - c;
+  }
+  return Math.min(PAIN.CUSHION_MAX, 1 - left);
+}
 // ════════════════════════════════════════════════════════════════
 // PAIN — how a subject takes discipline. Two stats on each character (0–1; defaults in the presets):
 //   tolerance: how much they can take before they're at their limit (the capacity),
@@ -2306,7 +2320,8 @@ function handsOnHead(ch) {
 //     tolerance blunts it),
 //   - the hold after contact: the hand or implement left on the skin keeps stinging (a rate per second while it stays),
 // and from the implement (a base weight, and how much of it is a sharp sting that fades fast against a deep ache that lingers),
-// and from how tender the skin already is (the marks). Distress is the pain now against the capacity; its bands drive the
+// and from how tender the skin already is (the marks), and from what they're wearing: clothing over the struck area cushions the
+// sting only (clothCushion / PAIN.CUSHION); the ache is the same through any layers. Distress is the pain now against the capacity; its bands drive the
 // reaction and the face, and past 1 they're at their limit.
 // ════════════════════════════════════════════════════════════════
 const PAIN = {
@@ -2318,6 +2333,8 @@ const PAIN = {
   ANTIC_MAX: 0.6, ANTIC_TAU: 1.0,        // dread adds up to this share, building over this many seconds of waiting
   DWELL_RATE: 0.9, DWELL_MAX: 2.0,      // staying on the skin adds this share of the smack per second, up to this many seconds
   TENDER: 0.6,                           // fully marked skin hurts this much more
+  // What clothing takes off the sting (the sharp part; the deep ache goes through cloth untouched): by garment, stacking.
+  CUSHION: { thong: 0.03, briefs: 0.12, trunks: 0.15, leggings: 0.25, shorts: 0.35, trousers: 0.4, skirt: 0.2 }, CUSHION_MAX: 0.7,
   CAP: 160,                              // the capacity at tolerance 0.5 is CAP × (0.6 + 0.8 × tolerance)
   BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [Infinity, 'at their limit']],
 };
@@ -2331,24 +2348,27 @@ function createPain(stats = {}) {
   // A smack lands. info: { implement, strength (0–1), speed (1 = standard), raised (seconds the arm waited raised), tender (0–1) }.
   // Returns { pain, reaction }: this smack's pain, and how hard the subject reacts (0–1) given it and how they already are.
   P.hit = info => {
+    const cushion = Math.max(0, Math.min(PAIN.CUSHION_MAX, info.cushion || 0));
     const I = PAIN.implement[info.implement] || PAIN.implement.hand;
     const speed = Math.max(0.2, info.speed == null ? 1 : info.speed);
     const antic = PAIN.ANTIC_MAX * (1 - Math.exp(-(info.raised || 0) / PAIN.ANTIC_TAU)) * (1 - 0.5 * st.tolerance);
     const p = I.base * (info.strength == null ? 1 : info.strength) * Math.pow(speed, PAIN.SPEED_EXP) * (1 + antic)
       * (1 + PAIN.TENDER * (info.tender || 0)) * (1 - PAIN.RESIST * st.resilience);
-    P.sting += p * I.sting; P.ache += p * (1 - I.sting);
-    P.hits++; P.dwell = 0; P.last = { p, I };
+    // Clothing blunts the sting only: the sharp share is cut, the ache comes through whole.
+    const sting = p * I.sting * (1 - cushion), ache = p * (1 - I.sting), eff = sting + ache;
+    P.sting += sting; P.ache += ache;
+    P.hits++; P.dwell = 0; P.last = { sting, ache, p: eff, cushion };
     P.peak = Math.max(P.peak, P.distress());
     if (P.distress() >= 1) P.atLimit = true;
     // The reaction: how big this smack is against what they can take, how worked up they already are, and how long they waited for it.
-    const reaction = Math.max(0, Math.min(1, 0.2 + 0.8 * (0.5 * p / (0.3 * P.capacity()) + 0.35 * Math.min(1, P.distress()) + 0.15 * (antic / PAIN.ANTIC_MAX))));
-    return { pain: p, reaction };
+    const reaction = Math.max(0, Math.min(1, 0.2 + 0.8 * (0.5 * eff / (0.3 * P.capacity()) + 0.35 * Math.min(1, P.distress()) + 0.15 * (antic / PAIN.ANTIC_MAX))));
+    return { pain: eff, reaction, cushion };
   };
   // Every frame. `onSkin`: the hand or implement is still on the skin from the last smack.
   P.update = (dt, onSkin = false) => {
     if (onSkin && P.last && P.dwell < PAIN.DWELL_MAX) {
-      const d = Math.min(dt, PAIN.DWELL_MAX - P.dwell), extra = P.last.p * PAIN.DWELL_RATE * d;
-      P.sting += extra * P.last.I.sting; P.ache += extra * (1 - P.last.I.sting); P.dwell += d;
+      const d = Math.min(dt, PAIN.DWELL_MAX - P.dwell);
+      P.sting += P.last.sting * PAIN.DWELL_RATE * d; P.ache += P.last.ache * PAIN.DWELL_RATE * d; P.dwell += d;
     }
     const k = 0.5 + st.resilience;   // the fade rate: resilient people recover faster
     P.sting *= Math.exp(-dt * k / PAIN.TAU_STING); P.ache *= Math.exp(-dt * k / PAIN.TAU_ACHE);
@@ -3007,7 +3027,7 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     const waited = scn.raisedT; scn.raisedT = 0;
     if (!scn.pain) return strength;
     const mk = s.marks, tender = mk ? Math.max(mk.L.f || 0, mk.R.f || 0) : 0;
-    scn.lastHit = scn.pain.hit({ implement: scn.implement, strength, speed: scn.timing.speed, raised: waited, tender });
+    scn.lastHit = scn.pain.hit({ implement: scn.implement, strength, speed: scn.timing.speed, raised: waited, tender, cushion: clothCushion(s) });
     return scn.lastHit.reaction;
   };
   // Strike from wherever the arm is. `strength` (0–1) scales the subject's reaction.
@@ -5686,7 +5706,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createPain, PAIN, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createPain, PAIN, clothCushion, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
