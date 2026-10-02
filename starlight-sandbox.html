@@ -21,6 +21,13 @@
   button.go.running { background: #6b2a2a; border-color: #c94c4c; }
   .row { margin: 6px 0; display: flex; gap: 6px; }
   .row button { flex: 1; }
+  .row2 { margin: 6px 0; }
+  .row2 label { display: flex; justify-content: space-between; color: #c9c9d1; font-size: 12px; margin-bottom: 1px; }
+  .row2 label span:last-child { color: #c9a84c; font-variant-numeric: tabular-nums; }
+  .row2 input[type=range] { width: 100%; }
+  #meter { height: 10px; background: #26262f; border-radius: 5px; overflow: hidden; margin-top: 4px; }
+  #meter > div { height: 100%; width: 0; background: #6b9e5a; transition: width 0.15s, background 0.3s; }
+  #band { font-size: 12px; color: #c9c9d1; margin-top: 3px; }
   #status { color: #8a8a96; font-size: 11px; margin-top: 8px; min-height: 2.6em; }
   #loading { position: fixed; inset: 0 300px 0 0; display: flex; align-items: center; justify-content: center; background: #16161b; color: #8a8a96; font-size: 14px; z-index: 5; }
   #loading.hide { display: none; }
@@ -38,6 +45,14 @@
   <h3>Position</h3><div class="tabs" id="p-position"></div>
   <h3>Implement</h3><div class="tabs" id="p-implement"></div>
   <h3>Severity</h3><div class="tabs" id="p-severity"></div>
+  <div class="row2"><label><span>Strike speed</span><span id="v-speed"></span></label><input type="range" id="s-speed" min="0.5" max="2" step="0.05"></div>
+  <div class="row2"><label><span>Hold before the swing</span><span id="v-hold"></span></label><input type="range" id="s-hold" min="0" max="3" step="0.05"></div>
+  <div class="row2"><label><span>Hold after contact</span><span id="v-dwell"></span></label><input type="range" id="s-dwell" min="0" max="3" step="0.05"></div>
+  <h3>Subject's limits</h3>
+  <div class="row2"><label><span>Tolerance</span><span id="v-tol"></span></label><input type="range" id="s-tol" min="0.05" max="1" step="0.01"></div>
+  <div class="row2"><label><span>Resilience</span><span id="v-res"></span></label><input type="range" id="s-res" min="0.05" max="1" step="0.01"></div>
+  <div id="meter"><div></div></div><div id="band"></div>
+  <div class="tabs" style="margin-top:6px"><button id="stoplimit" class="on">Stop at their limit</button><button id="resetpain">Rest</button></div>
   <h3>Clothing</h3>
   <div class="tabs"><button id="c-bottoms">Bottoms down</button><button id="c-briefs">Briefs down</button></div>
   <h3>Session</h3>
@@ -58,12 +73,13 @@ const { PRESETS, ORDER, clone } = S;
 // ── Choices ──────────────────────────────────────────────
 const POSITIONS = [['lap', 'Across the lap'], ['case', 'Over the case'], ['head', 'Hands on head'], ['knees', 'Hands on knees'], ['spread', 'Bent over, feet spread']];
 const IMPLEMENTS = [['hand', 'Hand'], ['hairbrush', 'Hair brush'], ['rod', 'Rod'], ['paddle', 'Paddle']];
-// Severity: how hard each smack lands (the subject's reaction), how fast the arm moves, how many smacks, and the pause between.
+// Severity: how hard each smack lands, how fast the arm moves, how many smacks, the hold before the swing and the hold after contact
+// (the last three can then be changed by hand). What each does to the subject is the pain model's (PAIN in the engine).
 const SEVERITY = [
-  { name: 'Light',  strength: 0.35, speed: 0.8,  count: 8,  gap: 0.9 },
-  { name: 'Medium', strength: 0.6,  speed: 1.0,  count: 12, gap: 0.65 },
-  { name: 'Firm',   strength: 0.85, speed: 1.2,  count: 16, gap: 0.5 },
-  { name: 'Severe', strength: 1.0,  speed: 1.45, count: 22, gap: 0.35 },
+  { name: 'Light',  strength: 0.35, speed: 0.8,  count: 8,  hold: 0.15, dwell: 1.0 },
+  { name: 'Medium', strength: 0.6,  speed: 1.0,  count: 12, hold: 0.3,  dwell: 0.6 },
+  { name: 'Firm',   strength: 0.85, speed: 1.2,  count: 16, hold: 0.2,  dwell: 0.45 },
+  { name: 'Severe', strength: 1.0,  speed: 1.45, count: 22, hold: 0.1,  dwell: 0.3 },
 ];
 // Camera for each position (from the disciplinarian's side).
 const CAMERA = {
@@ -73,7 +89,12 @@ const CAMERA = {
   knees:  { pos: [-2.8, 1.4, -3.0], target: [-0.05, 0.8, -0.2] },
   spread: { pos: [-3.0, 1.45, -3.4], target: [-0.1, 0.85, -0.45] },
 };
-const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true };
+const sel = { giver: 'aya', subject: 'kiko', position: 'case', implement: 'hand', severity: 1, bottoms: true, briefs: false, sound: true, stopAtLimit: true };
+// The strike settings (start from the severity, then follow the sliders) and each character's own limits (start from their preset).
+const strike = { speed: 1, hold: 0.3, dwell: 0.6 };
+const stats = {}; ORDER.forEach(k => stats[k] = { tolerance: PRESETS[k].tolerance, resilience: PRESETS[k].resilience });
+function fromSeverity() { const v = SEVERITY[sel.severity]; strike.speed = v.speed; strike.hold = v.hold; strike.dwell = v.dwell; }
+fromSeverity();
 let scn = null, running = false, done = 0, since = 0, total = 0;
 
 // ── Three.js scene ───────────────────────────────────────
@@ -151,9 +172,9 @@ function build() {
   for (const c of [g, s]) { scene.add(c.group); scene.add(c.helper); c.helper.visible = false; }
   const sv = savedMarks[sel.subject];
   if (sv) { s.marks = sv.marks; s.stripes = sv.stripes; S.copyMarks(s, s); }
-  scn = S.createDisciplineScene(scene, g, s, { lower: sel.bottoms, position: sel.position });
+  scn = S.createDisciplineScene(scene, g, s, { lower: sel.bottoms, position: sel.position, pain: stats[sel.subject] });   // (the same object: the sliders change the limits live)
   if (sel.briefs) S.setLowered(s, 'briefs', true);
-  scn.onImpact = (side, strength) => { Sound.clap(strength); done++; updateStatus(); };
+  scn.onImpact = (side, strength) => { Sound.clap(strength); done++; since = 0; updateStatus(); };
   scn.setImplement(sel.implement);
   pair = { g, s };
   scn.setBeat('relaxed');
@@ -165,7 +186,7 @@ function build() {
 function startRun() {
   if (!scn) return;
   const v = SEVERITY[sel.severity];
-  scn.timing = { ...scn.timing, speed: v.speed };
+  scn.timing = { ...scn.timing, speed: strike.speed };
   running = true; done = 0; since = 0; total = v.count; Sound.init();
   document.getElementById('go').textContent = 'Stop'; document.getElementById('go').classList.add('running');
   updateStatus();
@@ -180,7 +201,7 @@ function updateStatus() {
   const v = SEVERITY[sel.severity];
   document.getElementById('status').textContent = running
     ? `${done} of ${total} smacks — ${v.name.toLowerCase()}.`
-    : done ? `Finished: ${done} smacks.` : 'Ready.';
+    : done ? (scn && scn.pain && scn.pain.atLimit && sel.stopAtLimit ? `Stopped after ${done}: they reached their limit.` : `Finished: ${done} smacks.`) : 'Ready.';
 }
 
 // ── Choosers ─────────────────────────────────────────────
@@ -200,7 +221,17 @@ function refresh() {
   document.getElementById('c-bottoms').classList.toggle('on', sel.bottoms);
   document.getElementById('c-briefs').classList.toggle('on', sel.briefs);
   document.getElementById('sound').classList.toggle('on', sel.sound);
+  document.getElementById('stoplimit').classList.toggle('on', sel.stopAtLimit);
+  const set = (id, v, f) => { document.getElementById('s-' + id).value = v; document.getElementById('v-' + id).textContent = f(v); };
+  set('speed', strike.speed, v => v.toFixed(2) + '×'); set('hold', strike.hold, v => v.toFixed(2) + ' s'); set('dwell', strike.dwell, v => v.toFixed(2) + ' s');
+  const st = stats[sel.subject]; set('tol', st.tolerance, v => v.toFixed(2)); set('res', st.resilience, v => v.toFixed(2));
 }
+for (const [id, key] of [['speed', 'speed'], ['hold', 'hold'], ['dwell', 'dwell']]) document.getElementById('s-' + id).oninput = e => {
+  strike[key] = +e.target.value; if (key === 'speed' && scn) scn.timing = { ...scn.timing, speed: strike.speed }; refresh();
+};
+for (const [id, key] of [['tol', 'tolerance'], ['res', 'resilience']]) document.getElementById('s-' + id).oninput = e => { stats[sel.subject][key] = +e.target.value; refresh(); };
+document.getElementById('stoplimit').onclick = () => { sel.stopAtLimit = !sel.stopAtLimit; refresh(); };
+document.getElementById('resetpain').onclick = () => { if (scn && scn.pain) scn.pain.reset(); };
 chooser('p-giver', ORDER.map(k => [k, PRESETS[k].name]), 'giver', k => { if (sel.subject === k) sel.subject = sel.giver; sel.giver = k; refresh(); build(); });
 chooser('p-subject', ORDER.map(k => [k, PRESETS[k].name]), 'subject', k => { if (sel.giver === k) sel.giver = sel.subject; sel.subject = k; refresh(); build(); });
 chooser('p-position', POSITIONS, 'position', p => {
@@ -209,7 +240,7 @@ chooser('p-position', POSITIONS, 'position', p => {
   refresh(); build();
 });
 chooser('p-implement', IMPLEMENTS, 'implement', n => { sel.implement = n; refresh(); if (scn) { scn.setImplement(n); scn.setBeat('relaxed'); } });
-chooser('p-severity', SEVERITY.map((v, i) => [i, v.name]), 'severity', i => { sel.severity = i; refresh(); if (running) { scn.timing = { ...scn.timing, speed: SEVERITY[i].speed }; total = SEVERITY[i].count; updateStatus(); } });
+chooser('p-severity', SEVERITY.map((v, i) => [i, v.name]), 'severity', i => { sel.severity = i; fromSeverity(); refresh(); if (running) { scn.timing = { ...scn.timing, speed: strike.speed }; total = SEVERITY[i].count; updateStatus(); } });
 document.getElementById('c-bottoms').onclick = () => { sel.bottoms = !sel.bottoms; refresh(); build(); };
 document.getElementById('c-briefs').onclick = () => { sel.briefs = !sel.briefs; refresh(); build(); };
 document.getElementById('sound').onclick = () => { sel.sound = !sel.sound; refresh(); };
@@ -225,9 +256,9 @@ function frame() {
     if (running) {
       since += dt;
       const v = SEVERITY[sel.severity];
-      if (!scn.busy() && since > v.gap) {
-        if (done >= total) stopRun();
-        else { scn.cycle(v.strength); since = 0; }
+      if (!scn.busy() && since > strike.dwell) {
+        if (done >= total || (sel.stopAtLimit && scn.pain && scn.pain.atLimit)) stopRun();
+        else { scn.cycle(v.strength, undefined, undefined, strike.hold); since = 0; }
       }
     }
     const on = [pair.g, pair.s];
@@ -242,6 +273,15 @@ function frame() {
     for (const ch of on) S.faceStep(ch, dt);
     for (const ch of on) S.skirtStep(ch, dt, on, [scn && scn.bench]);
     for (const ch of on) S.bunchStep(ch);
+    if (scn.pain) {
+      const d = scn.pain.distress(), m = document.querySelector('#meter > div');
+      m.style.width = Math.min(100, d * 100) + '%';
+      m.style.background = d < 0.3 ? '#6b9e5a' : d < 0.6 ? '#b4a24a' : d < 0.9 ? '#c8803c' : '#c24a3a';
+      document.getElementById('band').textContent = `${pair.s.spec.m.name}: ${scn.pain.band()}`;
+      // The face follows how worked up they are.
+      const e = Math.max(0, (d - 0.35) / 0.65);
+      if (e > 0.02) S.setMood(pair.s, 'effort', Math.min(1, e)); else if (pair.s.mood) S.setMood(pair.s, null);
+    }
   }
   controls.update();
   renderer.render(scene, camera);

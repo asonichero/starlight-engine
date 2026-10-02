@@ -32,7 +32,7 @@
 // from the full underwear base layer, and the clothes go over it.
 const PRESETS = {
   aya: {
-    name: 'Aya', build: 'female', height: 172, legs: 1.02, shoulders: 38,
+    name: 'Aya', build: 'female', tolerance: 0.75, resilience: 0.6, height: 172, legs: 1.02, shoulders: 38,
     bust: 86, underbust: 72, waist: 63, hip: 100.5,
     neck: 31, arm: 25, forearm: 22, wrist: 14.5,
     thigh: 52, knee: 34, calf: 33, ankle: 20.5, cup: 3, glutes: 1.32, head: 1.0,
@@ -59,7 +59,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   rin: {
-    name: 'Rin', build: 'female', height: 163, legs: 1.05, shoulders: 37,
+    name: 'Rin', build: 'female', tolerance: 0.5, resilience: 0.55, height: 163, legs: 1.05, shoulders: 37,
     bust: 75.5, underbust: 68, waist: 62.5, hip: 87.5,
     neck: 26, arm: 23, forearm: 19, wrist: 13.5,
     thigh: 38, knee: 28, calf: 26, ankle: 19.5, cup: 2, glutes: 1.4, head: 1.04,
@@ -85,7 +85,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kiko: {
-    name: 'Kiko', build: 'female', height: 158, legs: 1.04, shoulders: 35,
+    name: 'Kiko', build: 'female', tolerance: 0.35, resilience: 0.45, height: 158, legs: 1.04, shoulders: 35,
     bust: 86, underbust: 60, waist: 64.5, hip: 93.5,
     neck: 26, arm: 30, forearm: 21, wrist: 14,
     thigh: 49.5, knee: 32.5, calf: 27.5, ankle: 20, cup: 4, glutes: 1.4, head: 1.1,
@@ -112,7 +112,7 @@ const PRESETS = {
     look: 'Rehearsal',
   },
   kenji: {
-    name: 'Kenji', build: 'male', height: 181.5, legs: 1.02, shoulders: 45,
+    name: 'Kenji', build: 'male', tolerance: 0.65, resilience: 0.7, height: 181.5, legs: 1.02, shoulders: 45,
     bust: 96, underbust: 90, waist: 80, hip: 94,
     neck: 38, arm: 32.5, forearm: 27, wrist: 17,
     thigh: 54, knee: 38, calf: 37, ankle: 23, glutes: 1.4, head: 1.0,
@@ -2295,6 +2295,69 @@ function handsOnHead(ch) {
 // so the subject's hips sit on that side with the head toward +X.
 // The scene is laid out at the world origin (the IK uses world axes).
 // ════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════
+// PAIN — how a subject takes discipline. Two stats on each character (0–1; defaults in the presets):
+//   tolerance: how much they can take before they're at their limit (the capacity),
+//   resilience: how little each smack builds, and how quickly the sting and ache fade between them.
+// Each landed smack adds pain from three things the player controls:
+//   - strike speed: a faster swing lands harder (`speed`, 1 = the standard swing),
+//   - the hold before the swing: the arm raised and waiting builds dread, which adds to the next smack (eases in, saturates;
+//     tolerance blunts it),
+//   - the hold after contact: the hand or implement left on the skin keeps stinging (a rate per second while it stays),
+// and from the implement (a base weight, and how much of it is a sharp sting that fades fast against a deep ache that lingers),
+// and from how tender the skin already is (the marks). Distress is the pain now against the capacity; its bands drive the
+// reaction and the face, and past 1 they're at their limit.
+// ════════════════════════════════════════════════════════════════
+const PAIN = {
+  // base: pain of a full-strength smack at standard speed; sting: the share that is sharp (fades fast).
+  implement: { hand: { base: 0.8, sting: 0.55 }, hairbrush: { base: 1.2, sting: 0.65 }, rod: { base: 1.4, sting: 0.9 }, paddle: { base: 1.2, sting: 0.3 } },
+  TAU_STING: 3.0, TAU_ACHE: 24,          // seconds for the sting and the ache to fall by 1/e, at resilience 0.5
+  RESIST: 0.5,                          // resilience takes up to this share off every smack
+  SPEED_EXP: 1.0,                        // pain ∝ speed ^ this
+  ANTIC_MAX: 0.6, ANTIC_TAU: 1.0,        // dread adds up to this share, building over this many seconds of waiting
+  DWELL_RATE: 0.9, DWELL_MAX: 2.0,      // staying on the skin adds this share of the smack per second, up to this many seconds
+  TENDER: 0.6,                           // fully marked skin hurts this much more
+  CAP: 8.0,                              // the capacity at tolerance 0.5 is CAP × (0.4 + 1.2 × tolerance)
+  BANDS: [[0.3, 'composed'], [0.6, 'flinching'], [0.9, 'struggling'], [Infinity, 'at their limit']],
+};
+function createPain(stats = {}) {
+  const st = { tolerance: 0.5, resilience: 0.5, ...stats };
+  const P = { stats: st, sting: 0, ache: 0, hits: 0, last: null, dwell: 0, atLimit: false, peak: 0 };
+  P.capacity = () => PAIN.CAP * (0.4 + 1.2 * st.tolerance);
+  P.level = () => P.sting + P.ache;
+  P.distress = () => P.level() / P.capacity();
+  P.band = () => PAIN.BANDS.find(([max]) => P.distress() < max)[1];
+  // A smack lands. info: { implement, strength (0–1), speed (1 = standard), raised (seconds the arm waited raised), tender (0–1) }.
+  // Returns { pain, reaction }: this smack's pain, and how hard the subject reacts (0–1) given it and how they already are.
+  P.hit = info => {
+    const I = PAIN.implement[info.implement] || PAIN.implement.hand;
+    const speed = Math.max(0.2, info.speed == null ? 1 : info.speed);
+    const antic = PAIN.ANTIC_MAX * (1 - Math.exp(-(info.raised || 0) / PAIN.ANTIC_TAU)) * (1 - 0.5 * st.tolerance);
+    const p = I.base * (info.strength == null ? 1 : info.strength) * Math.pow(speed, PAIN.SPEED_EXP) * (1 + antic)
+      * (1 + PAIN.TENDER * (info.tender || 0)) * (1 - PAIN.RESIST * st.resilience);
+    P.sting += p * I.sting; P.ache += p * (1 - I.sting);
+    P.hits++; P.dwell = 0; P.last = { p, I };
+    P.peak = Math.max(P.peak, P.distress());
+    if (P.distress() >= 1) P.atLimit = true;
+    // The reaction: how big this smack is against what they can take, how worked up they already are, and how long they waited for it.
+    const reaction = Math.max(0, Math.min(1, 0.2 + 0.8 * (0.5 * p / (0.3 * P.capacity()) + 0.35 * Math.min(1, P.distress()) + 0.15 * (antic / PAIN.ANTIC_MAX))));
+    return { pain: p, reaction };
+  };
+  // Every frame. `onSkin`: the hand or implement is still on the skin from the last smack.
+  P.update = (dt, onSkin = false) => {
+    if (onSkin && P.last && P.dwell < PAIN.DWELL_MAX) {
+      const d = Math.min(dt, PAIN.DWELL_MAX - P.dwell), extra = P.last.p * PAIN.DWELL_RATE * d;
+      P.sting += extra * P.last.I.sting; P.ache += extra * (1 - P.last.I.sting); P.dwell += d;
+    }
+    const k = 0.5 + st.resilience;   // the fade rate: resilient people recover faster
+    P.sting *= Math.exp(-dt * k / PAIN.TAU_STING); P.ache *= Math.exp(-dt * k / PAIN.TAU_ACHE);
+    if (P.distress() >= 1) P.atLimit = true;
+  };
+  P.reset = () => { P.sting = P.ache = 0; P.hits = 0; P.last = null; P.dwell = 0; P.atLimit = false; P.peak = 0; };
+  return P;
+}
+
 const STRIKE_K = 2;   // strike height: steps (~1.4 cm each) up from the glute/thigh fold
 // Swing timing, in seconds. `speed` multiplies how fast the arm moves (lift and
 // strike); the holds are not scaled.
@@ -2810,7 +2873,8 @@ const LAP_ALONG = 0.7, LAP_SETTLE = 0.9;
 function createDisciplineScene(parent, g, s, opts = {}) {
   const scn = { mode: 'beat', impacts: 0, timing: { ...DEFAULT_TIMING }, plant: {}, reactSide: 'L', palmAim: 0.65,
     beat: 'relaxed', side: 'L', g, s, bench: null, reaction: 0, loopT: 0, handR: null, handL: null, swing: 0,
-    fitCache: {}, onImpact: null, dv: null, pendingFlip: false,
+    fitCache: {}, onImpact: null, dv: null, pendingFlip: false, raisedT: 0,
+    pain: opts.pain ? createPain(typeof opts.pain === 'object' ? opts.pain : { tolerance: s.spec.m.tolerance, resilience: s.spec.m.resilience }) : null,
     atCase: opts.position === 'case' || opts.position === 'head' || opts.position === 'knees' || opts.position === 'spread', atHead: opts.position === 'head', atKnees: opts.position === 'knees' || opts.position === 'spread', atSpread: opts.position === 'spread', baseQ: SUBJ_BASE_Q, reactQ: SUBJ_REACT_Q, giverBaseQ: GIVER_Q, giverBase: GIVER_BASE, giverBeat: GIVER_BEAT };
   const atCase = scn.atCase, atHead = scn.atHead, atKnees = scn.atKnees;
   scn.wideContact = WIDE_CONTACT; scn.wideRaised = WIDE_RAISED; scn.wideRest = null;
@@ -2937,11 +3001,20 @@ function createDisciplineScene(parent, g, s, opts = {}) {
     scn.raise(lift, () => hold > 0 ? moveTo(1, hold, easeInOut, () => scn.strike(strength, strike)) : scn.strike(strength, strike));
   // True while the arm is still travelling (a cycle hasn't landed yet).
   scn.busy = () => !!(scn.dv && scn.dv.onArrive);
+  // A smack lands: with a pain model (opts.pain) the subject's reaction comes from it (the implement, strength, how fast the
+  // swing, how long the arm waited raised, how tender the skin already is), otherwise from `strength` as it always did.
+  scn.land = strength => {
+    const waited = scn.raisedT; scn.raisedT = 0;
+    if (!scn.pain) return strength;
+    const mk = s.marks, tender = mk ? Math.max(mk.L.f || 0, mk.R.f || 0) : 0;
+    scn.lastHit = scn.pain.hit({ implement: scn.implement, strength, speed: scn.timing.speed, raised: waited, tender });
+    return scn.lastHit.reaction;
+  };
   // Strike from wherever the arm is. `strength` (0–1) scales the subject's reaction.
   scn.strike = (strength = 1, dur = scn.timing.strike / scn.timing.speed) => {
     scn.pendingFlip = false;
     moveTo(2, dur, easeIn, () => {
-      scn.reaction = Math.max(scn.reaction, strength); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side);
+      scn.reaction = Math.max(scn.reaction, scn.land(strength)); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side);
       if (scn.onImpact) scn.onImpact(scn.side, strength);
     });
   };
@@ -3020,7 +3093,7 @@ function updateScene(scn, dt) {
     // end of the cycle (e.g. impact with a zero contact hold) still fires as it wraps.
     const raw = prev + dt;
     const crossed = at => (prev < at && raw >= at) || (prev < at + P && raw >= at + P);
-    if (crossed(t3)) { scn.reaction = 1; scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side); if (scn.onImpact) scn.onImpact(scn.side, 1); }
+    if (crossed(t3)) { scn.reaction = scn.land(1); scn.reactSide = scn.reactKey(); scn.impacts++; scn.mark(scn.side); if (scn.onImpact) scn.onImpact(scn.side, 1); }
     if (crossed(t1)) scn.side = scn.side === 'L' ? 'R' : 'L';            // alternate at the top of the lift
     scn.reaction *= Math.exp(-dt * 3.2);
   } else if (scn.mode === 'driven') {
@@ -3042,6 +3115,9 @@ function updateScene(scn, dt) {
   if (scn.tool && scn.tool.rod && scn.prevSwing > 1.2 && swing <= 1.2) scn.rodT = rodRoll();
   scn.prevSwing = swing;
   scn.swing = swing;
+  // The pain model: time spent waiting with the arm raised (dread), and time the hand stays on the skin after a smack.
+  if (Math.abs(swing - 1) < 0.05) scn.raisedT += dt;
+  if (scn.pain) scn.pain.update(dt, swing > 1.95);
   // Hands on head: the disciplinarian faces the subject squarely while relaxed and turns toward the
   // subject's hips as the arm comes up (about the vertical through the pelvis, so the feet stay put).
   if (scn.atHead) {
@@ -5610,7 +5686,7 @@ global.Starlight = {
   buildCharacter, disposeCharacter, resetCharacter, setPose, groundFeet, wideStance, poseQuats, degQ, mirrorPose, animateCharacter, bustSpring, bustContact, updateContacts, faceStep, setExpression, setMood, MOODS, moodFor, EXPR_RANGE, mouthOpening, EXPR_DEFAULTS, skirtStep, bunchStep, setSkirtOff, setSkirtGathered, setLowered, addMark, clearMarks, fadeMarks, fadeMarksMove, copyMarks, markStrength, markCount,
   hairStep, bodyColliders, hairReset, setFingerCurl, setFingerBend, fistPocket,
   ALL_MATS, lin, field, loftRing,
-  createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
+  createPain, PAIN, createDisciplineScene, POSITIONS: ['lap', 'case', 'head', 'knees', 'spread'], IMPLEMENTS, PADDLE, seatGiver, buildBench, DEFAULT_TIMING, GIVER_BASE, GIVER_BEAT, GIVER_SEATED,
   armIK, armReach, humeralTwist, elbowClearance, posedSkinNear, skinSignedDist, lookAt,
   setHandWorld, rotateBoneWorld, seatExcess, seatPoints, restClearance, PARENT,
   DANCE_BASE, DANCE_SRC, DANCE_MOVES, SIDED, STUMBLE, mirrorName, createDancer,
